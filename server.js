@@ -3,7 +3,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const { URL } = require('node:url');
-const { uid, readDatabase, writeDatabase } = require('./lib/store');
+const { uid, readDatabase, writeDatabase, settleDemoInvoices } = require('./lib/store');
 const billing = require('./lib/billing');
 const { today, addDays, addCycle } = billing;
 
@@ -453,5 +453,6 @@ server.listen(PORT, () => {
   console.log(`Brightloop is ready at http://localhost:${PORT}`);
   if (process.env.NODE_ENV !== 'production') console.log('Demo accounts: admin@brightloop.io, staff@brightloop.io, olivia@northstar.io · password: Brightloop!2026');
   runBilling();
+  if (settleDemoInvoices(db, today())) save();
   setInterval(() => { try { runBilling(); } catch (error) { console.error('Scheduled billing failed.', error); } }, 60 * 60 * 1000).unref();
 });
