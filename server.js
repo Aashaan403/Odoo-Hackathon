@@ -340,6 +340,8 @@ async function route(request, response) {
       const startDate = String(body.startDate || today()); const status = template ? 'Quotation' : (user.role === 'customer' ? 'Active' : 'Draft');
       db.counters.subscription += 1;
       const subscription = { id: uid('sub'), number: `SUB-${String(db.counters.subscription).padStart(4, '0')}`, customerId: customer.id, planId: plan.id, status, startDate, expiryDate: String(body.expiryDate || (template ? addDays(today(), template.validityDays) : '')), nextBillingDate: startDate, billingDay: Number(startDate.slice(-2)), paymentTermsDays: safeNumber(body.paymentTermsDays ?? 15, 'Payment terms', { min: 0 }), discountId: user.role === 'customer' ? '' : String(body.discountId || ''), lines, quoteTemplateId: template?.id || '' };
+      // A quotation's validity window is not the contract term; remember it so activation can drop it.
+      if (template && !body.expiryDate) subscription.quoteExpiresOn = subscription.expiryDate;
       if (subscription.discountId) byId(db.discounts, subscription.discountId, 'Discount');
       db.subscriptions.unshift(subscription); save(); return respond(response, 201, subscription);
     }
@@ -372,9 +374,10 @@ async function route(request, response) {
         if (!target || !transitions[action].includes(subscription.status)) fail(409, `Cannot ${action} a ${subscription.status.toLowerCase()} subscription.`);
         if (action === 'renew' && !plan.allowRenew) fail(400, 'Renewal is disabled for this plan.');
         if (action === 'activate' || action === 'renew') { subscription.startDate = today(); subscription.nextBillingDate = today(); if (action === 'renew') subscription.expiryDate = ''; }
+        if (action === 'activate' && subscription.quoteExpiresOn && subscription.expiryDate === subscription.quoteExpiresOn) { subscription.expiryDate = ''; subscription.quoteExpiresOn = ''; }
         if (action === 'activate' || action === 'renew' || action === 'resume') subscription.billingDay = Number(today().slice(-2));
         if (action === 'resume') subscription.nextBillingDate = today();
-        if (action === 'quotation' && !subscription.expiryDate) subscription.expiryDate = addDays(today(), 30);
+        if (action === 'quotation' && !subscription.expiryDate) { subscription.expiryDate = addDays(today(), 30); subscription.quoteExpiresOn = subscription.expiryDate; }
         if (action === 'confirm' && subscription.expiryDate && subscription.expiryDate < today()) fail(400, 'This quotation has expired.');
         subscription.status = target; save(); return respond(response, 200, subscription);
       }
