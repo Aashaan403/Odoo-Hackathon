@@ -22,8 +22,14 @@ function addCycle(value, interval) {
   const date = new Date(`${value}T12:00:00Z`);
   if (interval === 'daily') date.setUTCDate(date.getUTCDate() + 1);
   else if (interval === 'weekly') date.setUTCDate(date.getUTCDate() + 7);
-  else if (interval === 'yearly') date.setUTCFullYear(date.getUTCFullYear() + 1);
-  else date.setUTCMonth(date.getUTCMonth() + 1);
+  else {
+    const dayOfMonth = date.getUTCDate();
+    const monthDelta = interval === 'yearly' ? 12 : 1;
+    date.setUTCDate(1);
+    date.setUTCMonth(date.getUTCMonth() + monthDelta);
+    const lastDay = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 0)).getUTCDate();
+    date.setUTCDate(Math.min(dayOfMonth, lastDay));
+  }
   return date.toISOString().slice(0, 10);
 }
 function hashPassword(password) {
@@ -348,7 +354,7 @@ async function route(request, response) {
       let template = body.templateId ? byId(db.quoteTemplates, body.templateId, 'Quote template') : null;
       const plan = byId(db.plans, template?.planId || body.planId, 'Plan');
       if (!plan.active || plan.availableFrom > today() || (plan.availableTo && plan.availableTo < today())) fail(400, 'This plan is not available for a new subscription.');
-      const requestedLines = body.lines?.length ? body.lines : template?.lines || [{ productId: plan.productId, quantity: plan.minQuantity, unitPrice: plan.price, taxIds: [] }];
+      const requestedLines = body.lines?.length ? body.lines : template ? [...template.lines, ...(Array.isArray(body.addOnLines) ? body.addOnLines : [])] : [{ productId: plan.productId, quantity: plan.minQuantity, unitPrice: plan.price, taxIds: [] }];
       const lines = normalizeLines(requestedLines, plan.id);
       if (lines.filter((line) => line.productId === plan.productId).reduce((sum, line) => sum + line.quantity, 0) < plan.minQuantity) fail(400, `This plan requires at least ${plan.minQuantity} seats of its primary product.`);
       const startDate = String(body.startDate || today()); const status = template ? 'Quotation' : (user.role === 'customer' ? 'Active' : 'Draft');
@@ -395,7 +401,7 @@ async function route(request, response) {
       if (method === 'POST' && invoiceMatch[2] === 'action') {
         requireRole(user, 'admin', 'staff'); const body = await readBody(request);
         let deliveryStatus = '';
-        if (body.action === 'confirm' && invoice.status === 'Draft') invoice.status = 'Confirmed';
+        if (body.action === 'confirm' && invoice.status === 'Draft' && !invoice.cancelled) invoice.status = 'Confirmed';
         else if (body.action === 'cancel' && ['Draft', 'Confirmed'].includes(invoice.status) && !db.payments.some((payment) => payment.invoiceId === invoice.id)) { invoice.cancelled = true; const rule = db.discounts.find((item) => item.id === invoice.discountId); if (rule) rule.usedCount = Math.max(0, rule.usedCount - 1); }
         else if (body.action === 'send' && !invoice.cancelled && !invoice.sentAt) {
           const customer = byId(db.customers, invoice.customerId, 'Customer');
@@ -404,6 +410,13 @@ async function route(request, response) {
           deliveryStatus = await deliverEmail(message) ? 'delivered' : 'queued';
           if (deliveryStatus === 'queued') { db.emailOutbox ||= []; db.emailOutbox.unshift({ ...message, id: uid('mail'), invoiceId: invoice.id, createdAt: new Date().toISOString(), status: 'queued' }); }
           invoice.status = invoice.status === 'Draft' ? 'Confirmed' : invoice.status; invoice.sentAt = new Date().toISOString(); invoice.deliveryStatus = deliveryStatus;
+        }
+        else if (body.action === 'resend' && invoice.deliveryStatus === 'queued') {
+          const queued = (db.emailOutbox || []).find((item) => item.invoiceId === invoice.id && item.status === 'queued');
+          if (!queued) fail(404, 'Queued email was not found.');
+          if (!await deliverEmail({ to: queued.to, subject: queued.subject, text: queued.text, html: queued.html })) fail(503, 'Configure EMAIL_API_URL to deliver queued invoice emails.');
+          queued.status = 'delivered'; queued.deliveredAt = new Date().toISOString(); invoice.deliveryStatus = 'delivered';
+          deliveryStatus = 'delivered';
         }
         else fail(409, 'That invoice action is not available in its current state.');
         save(); return respond(response, 200, { ...invoice, deliveryStatus });
