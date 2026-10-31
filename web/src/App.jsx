@@ -10,6 +10,17 @@ import Payments from './pages/Payments.jsx';
 import Customers from './pages/Customers.jsx';
 import Reports from './pages/Reports.jsx';
 import Catalog from './pages/catalog/Catalog.jsx';
+import Quotes from './pages/Quotes.jsx';
+import Team from './pages/Team.jsx';
+import PortalOverview from './pages/portal/PortalOverview.jsx';
+import Plans from './pages/portal/Plans.jsx';
+
+// Routes each role can reach; the server enforces the same rules on every API call.
+function routesFor(role) {
+  if (role === 'customer') return [['plans', Plans], ['subscriptions', Subscriptions], ['invoices', Invoices]];
+  const staff = [['catalog', Catalog], ['quotes', Quotes], ['subscriptions', Subscriptions], ['invoices', Invoices], ['payments', Payments], ['reports', Reports], ['customers', Customers]];
+  return role === 'admin' ? [...staff, ['team', Team]] : staff;
+}
 
 export default function App() {
   const session = useSession();
@@ -28,13 +39,8 @@ export default function App() {
         </>
       ) : (
         <Route element={<Shell user={user} />}>
-          <Route index element={<Overview />} />
-          <Route path="subscriptions" element={<Subscriptions />} />
-          <Route path="invoices" element={<Invoices />} />
-          {user.role !== 'customer' && <Route path="payments" element={<Payments />} />}
-          {user.role !== 'customer' && <Route path="customers" element={<Customers />} />}
-          {user.role !== 'customer' && <Route path="reports" element={<Reports />} />}
-          {user.role !== 'customer' && <Route path="catalog" element={<Catalog />} />}
+          <Route index element={user.role === 'customer' ? <PortalOverview /> : <Overview />} />
+          {routesFor(user.role).map(([path, Page]) => <Route key={path} path={path} element={<Page />} />)}
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
       )}
