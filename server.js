@@ -339,9 +339,17 @@ async function route(request, response) {
       if (lines.filter((line) => line.productId === plan.productId).reduce((sum, line) => sum + line.quantity, 0) < plan.minQuantity) fail(400, `This plan requires at least ${plan.minQuantity} seats of its primary product.`);
       const startDate = String(body.startDate || today()); const status = template ? 'Quotation' : (user.role === 'customer' ? 'Active' : 'Draft');
       db.counters.subscription += 1;
-      const subscription = { id: uid('sub'), number: `SUB-${String(db.counters.subscription).padStart(4, '0')}`, customerId: customer.id, planId: plan.id, status, startDate, expiryDate: String(body.expiryDate || (template ? addDays(today(), template.validityDays) : '')), nextBillingDate: startDate, billingDay: Number(startDate.slice(-2)), paymentTermsDays: safeNumber(body.paymentTermsDays ?? 15, 'Payment terms', { min: 0 }), discountId: String(body.discountId || ''), lines, quoteTemplateId: template?.id || '' };
+      const subscription = { id: uid('sub'), number: `SUB-${String(db.counters.subscription).padStart(4, '0')}`, customerId: customer.id, planId: plan.id, status, startDate, expiryDate: String(body.expiryDate || (template ? addDays(today(), template.validityDays) : '')), nextBillingDate: startDate, billingDay: Number(startDate.slice(-2)), paymentTermsDays: safeNumber(body.paymentTermsDays ?? 15, 'Payment terms', { min: 0 }), discountId: user.role === 'customer' ? '' : String(body.discountId || ''), lines, quoteTemplateId: template?.id || '' };
       if (subscription.discountId) byId(db.discounts, subscription.discountId, 'Discount');
       db.subscriptions.unshift(subscription); save(); return respond(response, 201, subscription);
+    }
+    if (pathname === '/api/subscriptions/preview' && method === 'POST') {
+      requireUser(user); const body = await readBody(request);
+      const template = body.templateId ? byId(db.quoteTemplates, body.templateId, 'Quote template') : null;
+      const plan = byId(db.plans, template?.planId || body.planId, 'Plan');
+      const defaultLine = { productId: plan.productId, quantity: plan.minQuantity, unitPrice: plan.price, taxIds: db.taxes.filter((tax) => tax.active).map((tax) => tax.id) };
+      const lines = normalizeLines(body.lines?.length ? body.lines : template?.lines || [defaultLine], plan.id);
+      return respond(response, 200, priceSubscription({ lines, discountId: user.role === 'customer' ? '' : String(body.discountId || '') }));
     }
     const subscriptionMatch = pathname.match(/^\/api\/subscriptions\/([^/]+)(?:\/(action|renew))?$/);
     if (subscriptionMatch) {
