@@ -264,7 +264,7 @@ All endpoints are under `/api`, take and return JSON, and use the session cookie
 | `GET /reports?from=&to=` | Signed in | Summary figures and invoices for a date range |
 | `GET /health` | Anyone | Health check |
 
-## Configuration
+## Configurationn
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
