@@ -4,6 +4,7 @@ import Shell from './components/Shell.jsx';
 import { Loading } from './components/Layout.jsx';
 import AuthPage from './pages/Auth.jsx';
 import Overview from './pages/Overview.jsx';
+import Subscriptions from './pages/subscriptions/Subscriptions.jsx';
 
 export default function App() {
   const session = useSession();
@@ -23,6 +24,7 @@ export default function App() {
       ) : (
         <Route element={<Shell user={user} />}>
           <Route index element={<Overview />} />
+          <Route path="subscriptions" element={<Subscriptions />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
       )}
