@@ -1,11 +1,28 @@
-﻿{
+{
   "name": "brightloop-subscription-system",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "private": true,
   "description": "Brightloop subscription operations hackathon app",
   "scripts": {
     "start": "node server.js",
+    "dev": "vite",
+    "dev:api": "node --watch server.js",
+    "build": "vite build",
     "test": "node --test test/*.test.js"
   },
-  "engines": { "node": ">=20" }
+  "engines": {
+    "node": ">=20.19"
+  },
+  "dependencies": {
+    "@tanstack/react-query": "^5.105.0",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "react-router-dom": "^7.18.5"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.3.3",
+    "@vitejs/plugin-react": "^6.1.2",
+    "tailwindcss": "^4.3.3",
+    "vite": "^8.3.5"
+  }
 }

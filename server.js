@@ -10,7 +10,7 @@ const { today, addDays, addCycle } = billing;
 const PORT = Number(process.env.PORT || 3000);
 const sessions = new Map();
 const loginAttempts = new Map();
-const publicRoot = path.join(__dirname);
+const publicRoot = path.join(__dirname, 'web', 'dist');
 const COOKIE = 'brightloop_session';
 const DAY = 86400000;
 let db = readDatabase();
@@ -430,13 +430,15 @@ async function route(request, response) {
     fail(404, 'API route not found.');
   }
   if (method !== 'GET' && method !== 'HEAD') return respond(response, 405, { error: 'Method not allowed.' });
-  const relative = pathname === '/' || pathname === '/reset-password' ? 'index.html' : pathname.replace(/^\/+/, '');
-  if (!['index.html', 'styles.css', 'app.js'].includes(relative)) return respond(response, 404, { error: 'Not found.' });
-  const filename = path.resolve(publicRoot, relative);
-  if (!filename.startsWith(`${publicRoot}${path.sep}`) && filename !== path.join(publicRoot, 'index.html')) return respond(response, 403, { error: 'Forbidden.' });
-  if (!fs.existsSync(filename) || !fs.statSync(filename).isFile()) return respond(response, 404, { error: 'Not found.' });
-  const types = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.ico': 'image/x-icon' };
-  response.writeHead(200, { 'Content-Type': types[path.extname(filename)] || 'application/octet-stream', 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'same-origin', 'X-Frame-Options': 'DENY', 'Content-Security-Policy': "default-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; script-src 'self'; connect-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'" });
+  // Serve the built React app; any path that is not a real file falls back to index.html for client-side routes.
+  const requested = path.resolve(publicRoot, `.${pathname}`);
+  const isAsset = requested.startsWith(`${publicRoot}${path.sep}`) && fs.existsSync(requested) && fs.statSync(requested).isFile();
+  if (!isAsset && path.extname(pathname)) return respond(response, 404, { error: 'Not found.' });
+  const filename = isAsset ? requested : path.join(publicRoot, 'index.html');
+  if (!fs.existsSync(filename)) return respond(response, 503, { error: 'The web app has not been built yet. Run npm run build, then restart the server.' });
+  const types = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.ico': 'image/x-icon', '.woff2': 'font/woff2' };
+  const cacheControl = filename.includes(`${path.sep}assets${path.sep}`) ? 'public, max-age=31536000, immutable' : 'no-cache';
+  response.writeHead(200, { 'Content-Type': types[path.extname(filename)] || 'application/octet-stream', 'Cache-Control': cacheControl, 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'same-origin', 'X-Frame-Options': 'DENY', 'Content-Security-Policy': "default-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; script-src 'self'; connect-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'" });
   if (method === 'HEAD') return response.end();
   fs.createReadStream(filename).pipe(response);
 }

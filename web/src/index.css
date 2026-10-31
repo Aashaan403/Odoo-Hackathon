@@ -1,0 +1,70 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Archivo", ui-sans-serif, system-ui, sans-serif;
+  --color-ink: #0e0e0e;
+  --color-paper: #ffffff;
+  --color-plum: #714b67;
+  --color-plum-deep: #563850;
+  --color-plum-wash: #f5eff4;
+  --color-line: #e5e2e4;
+  --color-mist: #f8f7f7;
+  --color-mute: #6e696d;
+  --color-faint: #a7a1a5;
+  --color-alarm: #c4302b;
+  --color-settled: #2e7a52;
+  --animate-draw: draw 1.4s cubic-bezier(0.65, 0, 0.35, 1) both;
+  --animate-drawer: drawer 0.28s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  --animate-veil: veil 0.2s ease-out both;
+  --animate-toast: toast 0.24s ease-out both;
+
+  @keyframes draw {
+    from { stroke-dashoffset: 1; }
+    to { stroke-dashoffset: 0; }
+  }
+  @keyframes drawer {
+    from { transform: translateX(48px); opacity: 0; }
+    to { transform: translateX(0); opacity: 1; }
+  }
+  @keyframes veil {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+  @keyframes toast {
+    from { transform: translateY(12px); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+  }
+}
+
+@layer base {
+  html {
+    font-family: var(--font-sans);
+    color: var(--color-ink);
+    background: var(--color-paper);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+  body { min-width: 320px; }
+  ::selection { background: var(--color-plum); color: white; }
+  :focus-visible { outline: 2px solid var(--color-plum); outline-offset: 2px; }
+  input, select, textarea, button { font: inherit; color: inherit; }
+  button { cursor: pointer; }
+  button:disabled { cursor: not-allowed; }
+}
+
+@utility figure {
+  font-stretch: 125%;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.035em;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+}
+
+@media print {
+  body * { visibility: hidden; }
+  .print-area, .print-area * { visibility: visible; }
+  .print-area { position: absolute; inset: 0; padding: 32px; }
+  .no-print { display: none !important; }
+}
