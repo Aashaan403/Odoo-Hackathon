@@ -11,6 +11,9 @@ const marks = {
   Archived: 'bg-line',
   Off: 'border border-faint',
   On: 'bg-plum',
+  Expired: 'bg-line',
+  'Used up': 'bg-line',
+  Scheduled: 'border border-plum',
 };
 
 export function StatusTag({ status }) {

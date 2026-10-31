@@ -9,6 +9,7 @@ import Invoices from './pages/invoices/Invoices.jsx';
 import Payments from './pages/Payments.jsx';
 import Customers from './pages/Customers.jsx';
 import Reports from './pages/Reports.jsx';
+import Catalog from './pages/catalog/Catalog.jsx';
 
 export default function App() {
   const session = useSession();
@@ -33,6 +34,7 @@ export default function App() {
           {user.role !== 'customer' && <Route path="payments" element={<Payments />} />}
           {user.role !== 'customer' && <Route path="customers" element={<Customers />} />}
           {user.role !== 'customer' && <Route path="reports" element={<Reports />} />}
+          {user.role !== 'customer' && <Route path="catalog" element={<Catalog />} />}
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
       )}
