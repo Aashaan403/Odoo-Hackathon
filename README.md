@@ -16,14 +16,15 @@
   <a href="#every-scene-in-the-brief">Brief coverage</a> ·
   <a href="#how-billing-works">How billing works</a> ·
   <a href="#architecture">Architecture</a> ·
-  <a href="#api">API</a>
+  <a href="#api">API</a> ·
+  <a href="#configuration">Configuration</a>
 </p>
 
 ![Overview: monthly recurring revenue, collections, overdue balance and billed per month](docs/screenshots/overview.jpg)
 
-Brightloop Software earns its money every month, but runs on a spreadsheet: renewals get missed, invoices are typed by hand, payments are matched by scrolling bank statements, and nobody can say how much recurring revenue the company has. This app replaces all of that with one system for the admin who sets up the catalog, the team who handles customers day to day, and the customers who want to manage their own subscriptions.
+Brightloop Software earns its money every month but runs on a spreadsheet: renewals get missed, invoices are typed by hand, payments are matched by scrolling bank statements, and nobody can say how much recurring revenue the company has. Brightloop replaces all of that with one system for the admin who sets up the catalog, the team who handle customers day to day, and the customers who want to manage their own subscriptions.
 
-Built for the Odoo hackathon problem statement *Subscription Management System*.
+Built for the Odoo hackathon, on the problem statement *Subscription Management System*.
 
 | How it works today | How it works in Brightloop |
 | --- | --- |
@@ -99,7 +100,7 @@ npm test          # billing rule tests
 <summary><strong>A new customer signs up</strong></summary>
 
 - One account per email, enforced on signup and when staff add customers or team members.
-- Passwords must be more than eight characters with an uppercase letter, a lowercase letter and a special character. The form ticks off each rule as you type, and the server checks again.
+- Passwords need more than eight characters, including an uppercase letter, a lowercase letter and a special character. The form ticks off each rule as you type, and the server checks again.
 - **Forgot password** issues a single-use reset link that expires after 30 minutes and is sent to the registered email.
 - Three roles: the admin controls everything, staff handle day-to-day work without touching the catalog or team, and customers see only their own records. Only an admin can add a member of staff.
 </details>
