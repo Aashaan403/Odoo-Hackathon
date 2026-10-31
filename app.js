@@ -5,15 +5,34 @@ const initialSubscriptions = [
   { id: 'SUB-0245', customer: 'Demi Wilkinson', email: 'demi@wilkinson.io', initials: 'DW', color: 'av-orange', plan: 'Business', status: 'Past due', billing: 'Nov 10, 2026', amount: 149 },
   { id: 'SUB-0244', customer: 'Candice Wu', email: 'candice@wu.design', initials: 'CW', color: 'av-violet', plan: 'Starter', status: 'Active', billing: 'Nov 09, 2026', amount: 49 },
 ];
-let subscriptions = [...initialSubscriptions];
+const STORAGE_KEY = 'brightloop-subscriptions-v1';
+let subscriptions = loadSubscriptions();
 let statusFilter = 'All statuses';
-let nextId = 243;
+let nextId = Math.min(243, ...subscriptions.map((item) => Number(item.id.match(/\d+$/)?.[0]) - 1).filter(Number.isFinite));
 const body = document.querySelector('#subscriptions-body');
 const searchInput = document.querySelector('#table-search');
 const dialog = document.querySelector('#create-dialog');
 const form = document.querySelector('#subscription-form');
 const toast = document.querySelector('#toast');
 let toastTimeout;
+
+function loadSubscriptions() {
+  try {
+    const stored = JSON.parse(localStorage.getItem(STORAGE_KEY));
+    if (Array.isArray(stored) && stored.every((item) => item && typeof item.id === 'string' && typeof item.customer === 'string')) return stored;
+  } catch (error) {
+    // Ignore unavailable storage or malformed data and show the sample records.
+  }
+  return [...initialSubscriptions];
+}
+
+function saveSubscriptions() {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(subscriptions));
+  } catch (error) {
+    showToast('Subscription added for this session; browser storage is unavailable.');
+  }
+}
 
 function renderSubscriptions() {
   const search = searchInput.value.trim().toLowerCase();
@@ -69,6 +88,7 @@ form.addEventListener('submit', (event) => {
   else nextBill.setMonth(nextBill.getMonth() + 1);
   const billing = nextBill.toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' });
   subscriptions.unshift({ id: `SUB-${String(nextId--).padStart(4, '0')}`, customer, email: '', initials, color: 'av-violet', plan: data.get('plan'), status: 'Active', billing, amount });
+  saveSubscriptions();
   renderSubscriptions();
   dialog.close();
   showToast(`Subscription created for ${customer}.`);
