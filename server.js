@@ -4,6 +4,8 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 const { URL } = require('node:url');
 const { uid, readDatabase, writeDatabase } = require('./lib/store');
+const billing = require('./lib/billing');
+const { today, addDays, addCycle } = billing;
 
 const PORT = Number(process.env.PORT || 3000);
 const sessions = new Map();
@@ -16,24 +18,8 @@ const scrypt = (password, salt) => crypto.scryptSync(password, salt, 64).toStrin
 
 function save() { writeDatabase(db); }
 function fail(status, message) { const error = new Error(message); error.status = status; throw error; }
-function today() { return new Intl.DateTimeFormat('en-CA', { timeZone: process.env.BUSINESS_TIME_ZONE || 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date()); }
-function addDays(value, days) { const date = new Date(`${value}T12:00:00Z`); date.setUTCDate(date.getUTCDate() + Number(days || 0)); return date.toISOString().slice(0, 10); }
-function addCycle(value, interval, anchorDay = null) {
-  const date = new Date(`${value}T12:00:00Z`);
-  if (interval === 'daily') date.setUTCDate(date.getUTCDate() + 1);
-  else if (interval === 'weekly') date.setUTCDate(date.getUTCDate() + 7);
-  else {
-    const dayOfMonth = Number(anchorDay || date.getUTCDate());
-    const monthDelta = interval === 'yearly' ? 12 : 1;
-    date.setUTCDate(1);
-    date.setUTCMonth(date.getUTCMonth() + monthDelta);
-    const lastDay = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 0)).getUTCDate();
-    date.setUTCDate(Math.min(dayOfMonth, lastDay));
-  }
-  return date.toISOString().slice(0, 10);
-}
 function hashPassword(password) {
-  if (typeof password !== 'string' || password.length <= 8 || !/[A-Z]/.test(password) || !/[a-z]/.test(password) || !/[^A-Za-z0-9]/.test(password)) fail(400, 'Password must be more than 8 characters and include uppercase, lowercase, and a special character.');
+  if (!billing.isStrongPassword(password)) fail(400, 'Password must be more than 8 characters and include uppercase, lowercase, and a special character.');
   const salt = crypto.randomBytes(16).toString('hex');
   return `${salt}:${scrypt(password, salt)}`;
 }
@@ -109,46 +95,23 @@ function outstanding(invoice) {
 }
 function subscriptionAccess(user, subscription) { ownedOrStaff(user, 'Subscription', subscription.customerId); }
 function invoiceAccess(user, invoice) { ownedOrStaff(user, 'Invoice', invoice.customerId); }
-function applyDiscount(subscription, lines, subtotal) {
-  const rule = db.discounts.find((item) => item.id === subscription.discountId);
-  if (!rule || !rule.active || (rule.endDate && rule.endDate < today()) || (rule.startDate && rule.startDate > today()) || (rule.maxUses && rule.usedCount >= rule.maxUses)) return { amount: 0, rule: null, eligibleLines: [], eligibleBase: 0 };
-  if (subtotal < Number(rule.minimumPurchase || 0) || lines.reduce((sum, line) => sum + line.quantity, 0) < Number(rule.minimumQuantity || 1)) return { amount: 0, rule: null, eligibleLines: [], eligibleBase: 0 };
-  const eligibleLines = rule.scope === 'products' ? lines.filter((line) => !rule.productIds.length || rule.productIds.includes(line.productId)) : lines;
-  const eligibleBase = eligibleLines.reduce((sum, line) => sum + line.amount, 0);
-  if (!eligibleLines.length) return { amount: 0, rule: null, eligibleLines: [], eligibleBase: 0 };
-  const discount = rule.type === 'percentage' ? eligibleBase * Number(rule.value) / 100 : Number(rule.value);
-  return { amount: Number(Math.min(eligibleBase, discount).toFixed(2)), rule, eligibleLines, eligibleBase };
+function priceSubscription(subscription, onDate = today()) {
+  const lines = subscription.lines.map((line) => ({ ...line, description: line.description || byId(db.products, line.productId, 'Product').name }));
+  const discount = db.discounts.find((item) => item.id === subscription.discountId);
+  return billing.priceLines({ lines, discount, taxes: db.taxes.filter((tax) => tax.active) }, onDate);
 }
 function buildInvoice(subscription, period) {
   if (db.invoices.some((invoice) => invoice.subscriptionId === subscription.id && invoice.billingPeriod === period)) return null;
   const customer = byId(db.customers, subscription.customerId, 'Customer');
-  const lines = subscription.lines.map((line) => {
-    const product = byId(db.products, line.productId, 'Product');
-    const amount = Number((line.quantity * line.unitPrice).toFixed(2));
-    const taxRate = line.taxIds.reduce((sum, taxId) => sum + Number(db.taxes.find((tax) => tax.id === taxId)?.rate || 0), 0);
-    return { productId: product.id, description: line.description || product.name, quantity: line.quantity, unitPrice: line.unitPrice, taxRate, amount, taxAmount: Number((amount * taxRate / 100).toFixed(2)) };
-  });
-  const subtotal = Number(lines.reduce((sum, line) => sum + line.amount, 0).toFixed(2));
-  const discount = applyDiscount(subscription, lines, subtotal);
-  let taxAmount = 0;
-  for (const line of lines) {
-    const eligible = discount.eligibleLines.includes(line);
-    const discountShare = eligible && discount.eligibleBase ? discount.amount * line.amount / discount.eligibleBase : 0;
-    line.discountAmount = Number(discountShare.toFixed(2));
-    line.taxAmount = Number(((line.amount - line.discountAmount) * line.taxRate / 100).toFixed(2));
-    taxAmount += line.taxAmount;
-  }
-  taxAmount = Number(taxAmount.toFixed(2));
-  const total = Number(Math.max(0, subtotal - discount.amount + taxAmount).toFixed(2));
+  const priced = priceSubscription(subscription, period);
   db.counters.invoice += 1;
   const invoice = {
     id: uid('inv'), number: `INV-${String(db.counters.invoice).padStart(4, '0')}`, customerId: customer.id,
     subscriptionId: subscription.id, billingPeriod: period, issueDate: period, dueDate: addDays(period, subscription.paymentTermsDays),
-    lines, subtotal, discountAmount: discount.amount, discountId: discount.rule?.id || '', taxAmount, total,
-    status: 'Draft', sentAt: '', cancelled: false,
+    ...priced, status: 'Draft', sentAt: '', cancelled: false,
   };
   db.invoices.unshift(invoice);
-  if (discount.rule) discount.rule.usedCount += 1;
+  if (priced.discountId) byId(db.discounts, priced.discountId, 'Discount').usedCount += 1;
   return invoice;
 }
 function runBilling() {
@@ -183,11 +146,7 @@ function summary(source = db, customerId = null, from = '', to = '') {
   const invoices = source.invoices.filter((item) => (!customerId || item.customerId === customerId) && (!from || item.issueDate >= from) && (!to || item.issueDate <= to) && !item.cancelled);
   const invoiceIds = new Set(invoices.map((item) => item.id));
   const payments = source.payments.filter((item) => invoiceIds.has(item.invoiceId) && (!from || item.date >= from) && (!to || item.date <= to));
-  const mrr = subscriptions.filter((item) => item.status === 'Active').reduce((sum, item) => {
-    const total = item.lines.reduce((lineSum, line) => lineSum + Number(line.quantity) * Number(line.unitPrice), 0);
-    const interval = byId(source.plans, item.planId, 'Plan').interval;
-    return sum + total * ({ daily: 30, weekly: 4.345, monthly: 1, yearly: 1 / 12 }[interval] || 1);
-  }, 0);
+  const mrr = subscriptions.filter((item) => item.status === 'Active').reduce((sum, item) => sum + billing.monthlyValue(item, byId(source.plans, item.planId, 'Plan').interval), 0);
   const paid = payments.reduce((sum, item) => sum + Number(item.amount), 0);
   const owed = invoices.reduce((sum, item) => sum + outstanding(item), 0);
   const overdue = invoices.filter((item) => item.status !== 'Draft' && item.dueDate < today() && outstanding(item) > 0).reduce((sum, item) => sum + outstanding(item), 0);
