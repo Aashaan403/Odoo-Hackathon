@@ -18,12 +18,12 @@ function save() { writeDatabase(db); }
 function fail(status, message) { const error = new Error(message); error.status = status; throw error; }
 function today() { return new Intl.DateTimeFormat('en-CA', { timeZone: process.env.BUSINESS_TIME_ZONE || 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date()); }
 function addDays(value, days) { const date = new Date(`${value}T12:00:00Z`); date.setUTCDate(date.getUTCDate() + Number(days || 0)); return date.toISOString().slice(0, 10); }
-function addCycle(value, interval) {
+function addCycle(value, interval, anchorDay = null) {
   const date = new Date(`${value}T12:00:00Z`);
   if (interval === 'daily') date.setUTCDate(date.getUTCDate() + 1);
   else if (interval === 'weekly') date.setUTCDate(date.getUTCDate() + 7);
   else {
-    const dayOfMonth = date.getUTCDate();
+    const dayOfMonth = Number(anchorDay || date.getUTCDate());
     const monthDelta = interval === 'yearly' ? 12 : 1;
     date.setUTCDate(1);
     date.setUTCMonth(date.getUTCMonth() + monthDelta);
@@ -155,22 +155,24 @@ function runBilling() {
   let modified = false;
   const currentDay = today();
   for (const subscription of db.subscriptions) {
+    const plan = byId(db.plans, subscription.planId, 'Plan');
+    if (subscription.expiryDate && subscription.expiryDate < currentDay && plan.autoClose && ['Active', 'Paused'].includes(subscription.status)) { subscription.status = 'Closed'; modified = true; continue; }
     if (subscription.status !== 'Active' || !subscription.nextBillingDate) continue;
     let iterations = 0;
     while (subscription.nextBillingDate <= currentDay && iterations < 500) {
       if (subscription.expiryDate && subscription.nextBillingDate > subscription.expiryDate) {
-        if (byId(db.plans, subscription.planId, 'Plan').autoClose) { subscription.status = 'Closed'; modified = true; }
+        if (plan.autoClose) { subscription.status = 'Closed'; modified = true; }
         break;
       }
       const period = subscription.nextBillingDate;
       const invoice = buildInvoice(subscription, period);
       if (invoice) created.push(invoice);
-      const plan = byId(db.plans, subscription.planId, 'Plan');
-      subscription.nextBillingDate = addCycle(subscription.nextBillingDate, plan.interval);
+      subscription.billingDay ||= Number(period.slice(-2));
+      subscription.nextBillingDate = addCycle(subscription.nextBillingDate, plan.interval, subscription.billingDay);
       modified = true;
       iterations += 1;
     }
-    if (subscription.expiryDate && subscription.expiryDate < currentDay && subscription.status === 'Active' && byId(db.plans, subscription.planId, 'Plan').autoClose) { subscription.status = 'Closed'; modified = true; }
+    if (subscription.expiryDate && subscription.expiryDate < currentDay && subscription.status === 'Active' && plan.autoClose) { subscription.status = 'Closed'; modified = true; }
   }
   if (modified || created.length) save();
   return created;
@@ -367,7 +369,7 @@ async function route(request, response) {
       if (lines.filter((line) => line.productId === plan.productId).reduce((sum, line) => sum + line.quantity, 0) < plan.minQuantity) fail(400, `This plan requires at least ${plan.minQuantity} seats of its primary product.`);
       const startDate = String(body.startDate || today()); const status = template ? 'Quotation' : (user.role === 'customer' ? 'Active' : 'Draft');
       db.counters.subscription += 1;
-      const subscription = { id: uid('sub'), number: `SUB-${String(db.counters.subscription).padStart(4, '0')}`, customerId: customer.id, planId: plan.id, status, startDate, expiryDate: String(body.expiryDate || (template ? addDays(today(), template.validityDays) : '')), nextBillingDate: startDate, paymentTermsDays: safeNumber(body.paymentTermsDays || 15, 'Payment terms', { min: 0 }), discountId: String(body.discountId || ''), lines, quoteTemplateId: template?.id || '' };
+      const subscription = { id: uid('sub'), number: `SUB-${String(db.counters.subscription).padStart(4, '0')}`, customerId: customer.id, planId: plan.id, status, startDate, expiryDate: String(body.expiryDate || (template ? addDays(today(), template.validityDays) : '')), nextBillingDate: startDate, billingDay: Number(startDate.slice(-2)), paymentTermsDays: safeNumber(body.paymentTermsDays ?? 15, 'Payment terms', { min: 0 }), discountId: String(body.discountId || ''), lines, quoteTemplateId: template?.id || '' };
       if (subscription.discountId) byId(db.discounts, subscription.discountId, 'Discount');
       db.subscriptions.unshift(subscription); save(); return respond(response, 201, subscription);
     }
@@ -392,6 +394,8 @@ async function route(request, response) {
         if (!target || !transitions[action].includes(subscription.status)) fail(409, `Cannot ${action} a ${subscription.status.toLowerCase()} subscription.`);
         if (action === 'renew' && !plan.allowRenew) fail(400, 'Renewal is disabled for this plan.');
         if (action === 'activate' || action === 'renew') { subscription.startDate = today(); subscription.nextBillingDate = today(); if (action === 'renew') subscription.expiryDate = ''; }
+        if (action === 'activate' || action === 'renew' || action === 'resume') subscription.billingDay = Number(today().slice(-2));
+        if (action === 'resume') subscription.nextBillingDate = today();
         if (action === 'quotation' && !subscription.expiryDate) subscription.expiryDate = addDays(today(), 30);
         if (action === 'confirm' && subscription.expiryDate && subscription.expiryDate < today()) fail(400, 'This quotation has expired.');
         subscription.status = target; save(); return respond(response, 200, subscription);
