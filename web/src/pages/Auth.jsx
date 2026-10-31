@@ -12,6 +12,8 @@ const DEMO_ACCOUNTS = [
   ['Customer', 'olivia@northstar.io', 'Northstar Studio, sees only its own account'],
 ];
 
+export const passwordIsStrong = (value) => PASSWORD_RULES.every(([, test]) => test(value));
+
 const PASSWORD_RULES = [
   ['More than 8 characters', (value) => value.length > 8],
   ['An uppercase letter', (value) => /[A-Z]/.test(value)],
@@ -26,7 +28,7 @@ const COPY = {
   reset: { title: 'Choose a new password', lead: 'The link is valid for 30 minutes.', submit: 'Save new password' },
 };
 
-function PasswordRules({ value }) {
+export function PasswordRules({ value }) {
   return (
     <ul className="grid grid-cols-2 gap-x-4 gap-y-1.5 pt-1" aria-label="Password rules">
       {PASSWORD_RULES.map(([label, test]) => {
