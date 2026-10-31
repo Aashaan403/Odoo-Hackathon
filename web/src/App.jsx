@@ -6,6 +6,8 @@ import AuthPage from './pages/Auth.jsx';
 import Overview from './pages/Overview.jsx';
 import Subscriptions from './pages/subscriptions/Subscriptions.jsx';
 import Invoices from './pages/invoices/Invoices.jsx';
+import Payments from './pages/Payments.jsx';
+import Customers from './pages/Customers.jsx';
 
 export default function App() {
   const session = useSession();
@@ -27,6 +29,8 @@ export default function App() {
           <Route index element={<Overview />} />
           <Route path="subscriptions" element={<Subscriptions />} />
           <Route path="invoices" element={<Invoices />} />
+          {user.role !== 'customer' && <Route path="payments" element={<Payments />} />}
+          {user.role !== 'customer' && <Route path="customers" element={<Customers />} />}
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
       )}
