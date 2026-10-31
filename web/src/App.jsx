@@ -21,7 +21,7 @@ function routesFor(role) {
   const staff = [['catalog', Catalog], ['quotes', Quotes], ['subscriptions', Subscriptions], ['invoices', Invoices], ['payments', Payments], ['reports', Reports], ['customers', Customers]];
   return role === 'admin' ? [...staff, ['team', Team]] : staff;
 }
-
+//export default function app()
 export default function App() {
   const session = useSession();
   if (session.isLoading) return <div className="px-10"><Loading label="Opening Brightloop" /></div>;
