@@ -253,7 +253,15 @@ function publicData(user, searchParams) {
 // Give each first-run demo account a private development password. Existing password hashes are never reset.
 const demoPasswords = { 'admin@brightloop.io': 'Brightloop!2026', 'staff@brightloop.io': 'Brightloop!2026', 'olivia@northstar.io': 'Brightloop!2026' };
 let demoPasswordsSeeded = false;
-for (const user of db.users) if (!user.passwordHash && demoPasswords[user.email]) { user.passwordHash = `${user.email}:${scrypt(demoPasswords[user.email], user.email)}`; demoPasswordsSeeded = true; }
+const initialAdmin = db.users.find((user) => user.role === 'admin' && !user.passwordHash);
+if (process.env.NODE_ENV === 'production' && initialAdmin && !process.env.ADMIN_PASSWORD) throw new Error('Set ADMIN_PASSWORD before first production startup.');
+for (const user of db.users) if (!user.passwordHash) {
+  if (process.env.NODE_ENV === 'production') {
+    if (user.role === 'admin') user.passwordHash = hashPassword(process.env.ADMIN_PASSWORD);
+    else { const salt = crypto.randomBytes(16).toString('hex'); user.passwordHash = `${salt}:${scrypt(crypto.randomBytes(32).toString('hex'), salt)}`; }
+    demoPasswordsSeeded = true;
+  } else if (demoPasswords[user.email]) { user.passwordHash = `${user.email}:${scrypt(demoPasswords[user.email], user.email)}`; demoPasswordsSeeded = true; }
+}
 if (demoPasswordsSeeded) save();
 
 async function route(request, response) {
@@ -302,7 +310,7 @@ async function route(request, response) {
         const token = crypto.randomBytes(32).toString('hex');
         db.passwordResets = db.passwordResets.filter((item) => item.userId !== account.id);
         db.passwordResets.push({ userId: account.id, tokenHash: crypto.createHash('sha256').update(token).digest('hex'), expires: Date.now() + 30 * 60 * 1000 }); save();
-        const resetUrl = `${process.env.PUBLIC_URL || `http://${request.headers.host || `localhost:${PORT}`}`}/reset-password?token=${token}`;
+        const resetUrl = `${process.env.PUBLIC_URL || `http://localhost:${PORT}`}/reset-password?token=${token}`;
         if (process.env.EMAIL_API_URL) await deliverEmail({ to: account.email, subject: 'Reset your Brightloop password', text: `Use this link within 30 minutes to reset your password: ${resetUrl}`, html: `<p>Use this link within 30 minutes to reset your password:</p><p><a href="${resetUrl}">Reset password</a></p>` });
         else if (process.env.NODE_ENV !== 'production') { resetLink = `/reset-password?token=${token}`; console.log(`Development password reset for ${account.email}: ${resetUrl}`); }
       }

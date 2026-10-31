@@ -22,6 +22,8 @@ Use `Brightloop!2026` for each demo account:
 
 The initial records include sample customers, three plans, products and variants, a tax rule, a discount, quote templates, subscriptions, an invoice, and a payment. The data file is created once and kept between server restarts; remove it to rebuild the original sample workspace.
 
+On first production startup, set `ADMIN_PASSWORD` to a strong password that meets the same account rules. Production startup refuses to initialize the seeded admin account without it, and it never assigns the published demo password to production accounts.
+
 ## Main workflows
 
 - Sign up with a unique email and a password over eight characters containing uppercase, lowercase, and a special character. Password reset tokens expire after 30 minutes.
