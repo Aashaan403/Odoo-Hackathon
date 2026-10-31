@@ -212,7 +212,7 @@ function publicData(user, searchParams) {
   result.quoteTemplates = user.role === 'customer' ? [] : db.quoteTemplates;
   const customers = indexById(db.customers); const plans = indexById(db.plans); const subscriptions = indexById(db.subscriptions); const paid = paidTotals(); const currentDay = today();
   result.subscriptions = db.subscriptions.filter((item) => !customerId || item.customerId === customerId).map((item) => ({ ...item, customer: customers.get(item.customerId), plan: plans.get(item.planId) }));
-  result.invoices = db.invoices.filter((item) => (!customerId || item.customerId === customerId) && !item.cancelled).map((item) => {
+  result.invoices = db.invoices.filter((item) => (!customerId || (item.customerId === customerId && item.status !== 'Draft')) && !item.cancelled).map((item) => {
     const balance = outstanding(item, paid);
     const subscription = subscriptions.get(item.subscriptionId);
     return { ...item, customer: customers.get(item.customerId), subscription: subscription && { id: subscription.id, number: subscription.number }, paid: billing.round(item.total - balance), outstanding: balance, status: balance <= 0 ? 'Paid' : (item.status === 'Confirmed' && item.dueDate < currentDay ? 'Overdue' : item.status) };
