@@ -16,7 +16,7 @@ const scrypt = (password, salt) => crypto.scryptSync(password, salt, 64).toStrin
 
 function save() { writeDatabase(db); }
 function fail(status, message) { const error = new Error(message); error.status = status; throw error; }
-function today() { return new Date().toISOString().slice(0, 10); }
+function today() { return new Intl.DateTimeFormat('en-CA', { timeZone: process.env.BUSINESS_TIME_ZONE || 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date()); }
 function addDays(value, days) { const date = new Date(`${value}T12:00:00Z`); date.setUTCDate(date.getUTCDate() + Number(days || 0)); return date.toISOString().slice(0, 10); }
 function addCycle(value, interval) {
   const date = new Date(`${value}T12:00:00Z`);
@@ -39,6 +39,12 @@ function verifyPassword(password, stored) {
   return candidate.length === expected.length && crypto.timingSafeEqual(candidate, expected);
 }
 function publicUser(user) { return { id: user.id, name: user.name, email: user.email, role: user.role, customerId: user.customerId || null }; }
+async function deliverEmail(message) {
+  if (!process.env.EMAIL_API_URL) return false;
+  const response = await fetch(process.env.EMAIL_API_URL, { method: 'POST', headers: { 'Content-Type': 'application/json', ...(process.env.EMAIL_API_KEY ? { Authorization: `Bearer ${process.env.EMAIL_API_KEY}` } : {}) }, body: JSON.stringify(message) });
+  if (!response.ok) fail(502, `Email delivery service returned ${response.status}.`);
+  return true;
+}
 function getCookie(request, name) {
   const value = (request.headers.cookie || '').split(';').map((part) => part.trim()).find((part) => part.startsWith(`${name}=`));
   return value ? decodeURIComponent(value.slice(name.length + 1)) : '';
@@ -98,13 +104,13 @@ function subscriptionAccess(user, subscription) { ownedOrStaff(user, 'Subscripti
 function invoiceAccess(user, invoice) { ownedOrStaff(user, 'Invoice', invoice.customerId); }
 function applyDiscount(subscription, lines, subtotal) {
   const rule = db.discounts.find((item) => item.id === subscription.discountId);
-  if (!rule || !rule.active || (rule.endDate && rule.endDate < today()) || (rule.startDate && rule.startDate > today()) || (rule.maxUses && rule.usedCount >= rule.maxUses)) return { amount: 0, rule: null, eligibleLines: [] };
-  if (subtotal < Number(rule.minimumPurchase || 0) || lines.reduce((sum, line) => sum + line.quantity, 0) < Number(rule.minimumQuantity || 1)) return { amount: 0, rule: null, eligibleLines: [] };
+  if (!rule || !rule.active || (rule.endDate && rule.endDate < today()) || (rule.startDate && rule.startDate > today()) || (rule.maxUses && rule.usedCount >= rule.maxUses)) return { amount: 0, rule: null, eligibleLines: [], eligibleBase: 0 };
+  if (subtotal < Number(rule.minimumPurchase || 0) || lines.reduce((sum, line) => sum + line.quantity, 0) < Number(rule.minimumQuantity || 1)) return { amount: 0, rule: null, eligibleLines: [], eligibleBase: 0 };
   const eligibleLines = rule.scope === 'products' ? lines.filter((line) => !rule.productIds.length || rule.productIds.includes(line.productId)) : lines;
   const eligibleBase = eligibleLines.reduce((sum, line) => sum + line.amount, 0);
-  if (!eligibleLines.length) return { amount: 0, rule: null, eligibleLines: [] };
+  if (!eligibleLines.length) return { amount: 0, rule: null, eligibleLines: [], eligibleBase: 0 };
   const discount = rule.type === 'percentage' ? eligibleBase * Number(rule.value) / 100 : Number(rule.value);
-  return { amount: Number(Math.min(eligibleBase, discount).toFixed(2)), rule, eligibleLines };
+  return { amount: Number(Math.min(eligibleBase, discount).toFixed(2)), rule, eligibleLines, eligibleBase };
 }
 function buildInvoice(subscription, period) {
   if (db.invoices.some((invoice) => invoice.subscriptionId === subscription.id && invoice.billingPeriod === period && !invoice.cancelled)) return null;
@@ -117,10 +123,15 @@ function buildInvoice(subscription, period) {
   });
   const subtotal = Number(lines.reduce((sum, line) => sum + line.amount, 0).toFixed(2));
   const discount = applyDiscount(subscription, lines, subtotal);
-  const taxAmount = Number(lines.reduce((sum, line) => {
-    const ratio = subtotal ? (line.amount / subtotal) : 0;
-    return sum + (line.taxAmount * (1 - (discount.amount * ratio / Math.max(line.amount, 1))));
-  }, 0).toFixed(2));
+  let taxAmount = 0;
+  for (const line of lines) {
+    const eligible = discount.eligibleLines.includes(line);
+    const discountShare = eligible && discount.eligibleBase ? discount.amount * line.amount / discount.eligibleBase : 0;
+    line.discountAmount = Number(discountShare.toFixed(2));
+    line.taxAmount = Number(((line.amount - line.discountAmount) * line.taxRate / 100).toFixed(2));
+    taxAmount += line.taxAmount;
+  }
+  taxAmount = Number(taxAmount.toFixed(2));
   const total = Number(Math.max(0, subtotal - discount.amount + taxAmount).toFixed(2));
   db.counters.invoice += 1;
   const invoice = {
@@ -283,10 +294,8 @@ async function route(request, response) {
         db.passwordResets = db.passwordResets.filter((item) => item.userId !== account.id);
         db.passwordResets.push({ userId: account.id, tokenHash: crypto.createHash('sha256').update(token).digest('hex'), expires: Date.now() + 30 * 60 * 1000 }); save();
         const resetUrl = `${process.env.PUBLIC_URL || `http://${request.headers.host || `localhost:${PORT}`}`}/reset-password?token=${token}`;
-        if (process.env.EMAIL_API_URL) {
-          const emailResponse = await fetch(process.env.EMAIL_API_URL, { method: 'POST', headers: { 'Content-Type': 'application/json', ...(process.env.EMAIL_API_KEY ? { Authorization: `Bearer ${process.env.EMAIL_API_KEY}` } : {}) }, body: JSON.stringify({ to: account.email, subject: 'Reset your Brightloop password', text: `Use this link within 30 minutes to reset your password: ${resetUrl}`, html: `<p>Use this link within 30 minutes to reset your password:</p><p><a href="${resetUrl}">Reset password</a></p>` }) });
-          if (!emailResponse.ok) console.error(`Password reset email delivery failed (${emailResponse.status}).`);
-        } else if (process.env.NODE_ENV !== 'production') { resetLink = `/reset-password?token=${token}`; console.log(`Development password reset for ${account.email}: ${resetUrl}`); }
+        if (process.env.EMAIL_API_URL) await deliverEmail({ to: account.email, subject: 'Reset your Brightloop password', text: `Use this link within 30 minutes to reset your password: ${resetUrl}`, html: `<p>Use this link within 30 minutes to reset your password:</p><p><a href="${resetUrl}">Reset password</a></p>` });
+        else if (process.env.NODE_ENV !== 'production') { resetLink = `/reset-password?token=${token}`; console.log(`Development password reset for ${account.email}: ${resetUrl}`); }
       }
       return respond(response, 200, { message: 'If that email has an account, password reset instructions are ready.', resetLink });
     }
@@ -366,6 +375,7 @@ async function route(request, response) {
         if (!target || !transitions[action].includes(subscription.status)) fail(409, `Cannot ${action} a ${subscription.status.toLowerCase()} subscription.`);
         if (action === 'renew' && !plan.allowRenew) fail(400, 'Renewal is disabled for this plan.');
         if (action === 'activate' || action === 'renew') { subscription.startDate = today(); subscription.nextBillingDate = today(); if (action === 'renew') subscription.expiryDate = ''; }
+        if (action === 'quotation' && !subscription.expiryDate) subscription.expiryDate = addDays(today(), 30);
         if (action === 'confirm' && subscription.expiryDate && subscription.expiryDate < today()) fail(400, 'This quotation has expired.');
         subscription.status = target; save(); return respond(response, 200, subscription);
       }
@@ -381,11 +391,18 @@ async function route(request, response) {
       if (method === 'GET' && !invoiceMatch[2]) return respond(response, 200, { ...invoice, payments: db.payments.filter((payment) => payment.invoiceId === invoice.id), outstanding: outstanding(invoice) });
       if (method === 'POST' && invoiceMatch[2] === 'action') {
         requireRole(user, 'admin', 'staff'); const body = await readBody(request);
+        let deliveryStatus = '';
         if (body.action === 'confirm' && invoice.status === 'Draft') invoice.status = 'Confirmed';
         else if (body.action === 'cancel' && ['Draft', 'Confirmed'].includes(invoice.status)) invoice.cancelled = true;
-        else if (body.action === 'send' && !invoice.cancelled) { invoice.status = invoice.status === 'Draft' ? 'Confirmed' : invoice.status; invoice.sentAt = new Date().toISOString(); }
+        else if (body.action === 'send' && !invoice.cancelled) {
+          const customer = byId(db.customers, invoice.customerId, 'Customer');
+          const lines = invoice.lines.map((line) => `${line.description} x ${line.quantity}: $${line.amount.toFixed(2)}`).join('\n');
+          deliveryStatus = await deliverEmail({ to: customer.email, subject: `Brightloop invoice ${invoice.number}`, text: `Hello ${customer.name},\n\nInvoice ${invoice.number} is due ${invoice.dueDate}.\n${lines}\nTotal: $${invoice.total.toFixed(2)}\n\nThank you, Brightloop`, html: `<p>Hello ${escapeHtml(customer.name)},</p><p>Invoice <strong>${escapeHtml(invoice.number)}</strong> is due ${escapeHtml(invoice.dueDate)}.</p><pre>${escapeHtml(lines)}</pre><p>Total: <strong>$${invoice.total.toFixed(2)}</strong></p><p>Thank you, Brightloop</p>` }) ? 'delivered' : 'queued';
+          if (deliveryStatus === 'queued') { db.emailOutbox ||= []; db.emailOutbox.unshift({ id: uid('mail'), to: customer.email, subject: `Brightloop invoice ${invoice.number}`, invoiceId: invoice.id, createdAt: new Date().toISOString(), status: 'queued' }); }
+          invoice.status = invoice.status === 'Draft' ? 'Confirmed' : invoice.status; invoice.sentAt = new Date().toISOString(); invoice.deliveryStatus = deliveryStatus;
+        }
         else fail(409, 'That invoice action is not available in its current state.');
-        save(); return respond(response, 200, invoice);
+        save(); return respond(response, 200, { ...invoice, deliveryStatus });
       }
       if (method === 'POST' && invoiceMatch[2] === 'payments') {
         requireRole(user, 'admin', 'staff'); const body = await readBody(request);
