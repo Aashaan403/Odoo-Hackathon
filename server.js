@@ -334,7 +334,7 @@ async function route(request, response) {
       const customerId = user.role === 'customer' ? user.customerId : body.customerId; const customer = byId(db.customers, customerId, 'Customer');
       if (user.role === 'staff' || user.role === 'admin') requireRole(user, 'admin', 'staff');
       let template = body.templateId ? byId(db.quoteTemplates, body.templateId, 'Quote template') : null;
-      const plan = byId(db.plans, body.planId || template?.planId, 'Plan');
+      const plan = byId(db.plans, template?.planId || body.planId, 'Plan');
       if (!plan.active || plan.availableFrom > today() || (plan.availableTo && plan.availableTo < today())) fail(400, 'This plan is not available for a new subscription.');
       const requestedLines = body.lines?.length ? body.lines : template?.lines || [{ productId: plan.productId, quantity: plan.minQuantity, unitPrice: plan.price, taxIds: [] }];
       const lines = normalizeLines(requestedLines, plan.id);
