@@ -233,9 +233,7 @@ function publicData(user, searchParams) {
 // Give each first-run demo account a private development password. Existing password hashes are never reset.
 const demoPasswords = { 'admin@brightloop.io': 'Brightloop!2026', 'staff@brightloop.io': 'Brightloop!2026', 'olivia@northstar.io': 'Brightloop!2026' };
 let demoPasswordsSeeded = false;
-for (const user of db.users) if (!user.passwordHash && demoPasswords[user.email]) { user.passwordHash = `${crypto.randomBytes(16).toString('hex')}:${scrypt(demoPasswords[user.email], user.email)}`; user.demoSalt = user.email; demoPasswordsSeeded = true; }
-// Demo hashes use the email as the scrypt salt to keep this one-time setup deterministic.
-for (const user of db.users) if (user.demoSalt) { user.passwordHash = `${user.demoSalt}:${scrypt(demoPasswords[user.email], user.demoSalt)}`; delete user.demoSalt; demoPasswordsSeeded = true; }
+for (const user of db.users) if (!user.passwordHash && demoPasswords[user.email]) { user.passwordHash = `${user.email}:${scrypt(demoPasswords[user.email], user.email)}`; demoPasswordsSeeded = true; }
 if (demoPasswordsSeeded) save();
 
 async function route(request, response) {
@@ -280,7 +278,16 @@ async function route(request, response) {
     if (method === 'POST' && pathname === '/api/auth/password-reset') {
       const body = await readBody(request); const email = String(body.email || '').trim().toLowerCase(); const account = db.users.find((item) => item.email.toLowerCase() === email);
       let resetLink = '';
-      if (account) { const token = crypto.randomBytes(32).toString('hex'); db.passwordResets = db.passwordResets.filter((item) => item.userId !== account.id); db.passwordResets.push({ userId: account.id, tokenHash: crypto.createHash('sha256').update(token).digest('hex'), expires: Date.now() + 30 * 60 * 1000 }); save(); if (process.env.NODE_ENV !== 'production') resetLink = `/reset-password?token=${token}`; }
+      if (account) {
+        const token = crypto.randomBytes(32).toString('hex');
+        db.passwordResets = db.passwordResets.filter((item) => item.userId !== account.id);
+        db.passwordResets.push({ userId: account.id, tokenHash: crypto.createHash('sha256').update(token).digest('hex'), expires: Date.now() + 30 * 60 * 1000 }); save();
+        const resetUrl = `${process.env.PUBLIC_URL || `http://${request.headers.host || `localhost:${PORT}`}`}/reset-password?token=${token}`;
+        if (process.env.EMAIL_API_URL) {
+          const emailResponse = await fetch(process.env.EMAIL_API_URL, { method: 'POST', headers: { 'Content-Type': 'application/json', ...(process.env.EMAIL_API_KEY ? { Authorization: `Bearer ${process.env.EMAIL_API_KEY}` } : {}) }, body: JSON.stringify({ to: account.email, subject: 'Reset your Brightloop password', text: `Use this link within 30 minutes to reset your password: ${resetUrl}`, html: `<p>Use this link within 30 minutes to reset your password:</p><p><a href="${resetUrl}">Reset password</a></p>` }) });
+          if (!emailResponse.ok) console.error(`Password reset email delivery failed (${emailResponse.status}).`);
+        } else if (process.env.NODE_ENV !== 'production') { resetLink = `/reset-password?token=${token}`; console.log(`Development password reset for ${account.email}: ${resetUrl}`); }
+      }
       return respond(response, 200, { message: 'If that email has an account, password reset instructions are ready.', resetLink });
     }
     if (method === 'POST' && pathname === '/api/auth/password-reset/complete') {
@@ -315,7 +322,7 @@ async function route(request, response) {
       if (method === 'PATCH' && recordId) {
         const body = await readBody(request); const record = byId(db[kind], recordId);
         if (kind === 'products') Object.assign(record, { name: body.name ?? record.name, type: body.type ?? record.type, salesPrice: body.salesPrice === undefined ? record.salesPrice : safeNumber(body.salesPrice, 'Sales price'), costPrice: body.costPrice === undefined ? record.costPrice : safeNumber(body.costPrice, 'Cost price'), notes: body.notes ?? record.notes, variants: body.variants ?? record.variants, active: body.active ?? record.active });
-        else if (kind === 'plans') { for (const key of ['name', 'price', 'interval', 'minQuantity', 'availableFrom', 'availableTo', 'autoClose', 'allowEarlyClose', 'allowPause', 'allowRenew', 'active']) if (body[key] !== undefined) record[key] = body[key]; }
+        else if (kind === 'plans') { for (const key of ['name', 'price', 'interval', 'minQuantity', 'availableFrom', 'availableTo', 'autoClose', 'allowEarlyClose', 'allowPause', 'allowRenew', 'active']) if (body[key] !== undefined) record[key] = body[key]; if (body.productId !== undefined) { byId(db.products, body.productId, 'Product'); record.productId = body.productId; } }
         else if (kind === 'taxes') { if (body.name !== undefined) record.name = String(body.name); if (body.rate !== undefined) record.rate = safeNumber(body.rate, 'Tax rate'); if (body.active !== undefined) record.active = Boolean(body.active); }
         else Object.assign(record, body, { id: record.id });
         save(); return respond(response, 200, record);
@@ -399,11 +406,12 @@ async function route(request, response) {
   }
   if (method !== 'GET' && method !== 'HEAD') return respond(response, 405, { error: 'Method not allowed.' });
   const relative = pathname === '/' ? 'index.html' : pathname.replace(/^\/+/, '');
+  if (!['index.html', 'styles.css', 'app.js'].includes(relative)) return respond(response, 404, { error: 'Not found.' });
   const filename = path.resolve(publicRoot, relative);
   if (!filename.startsWith(`${publicRoot}${path.sep}`) && filename !== path.join(publicRoot, 'index.html')) return respond(response, 403, { error: 'Forbidden.' });
   if (!fs.existsSync(filename) || !fs.statSync(filename).isFile()) return respond(response, 404, { error: 'Not found.' });
   const types = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.ico': 'image/x-icon' };
-  response.writeHead(200, { 'Content-Type': types[path.extname(filename)] || 'application/octet-stream', 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'same-origin' });
+  response.writeHead(200, { 'Content-Type': types[path.extname(filename)] || 'application/octet-stream', 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'same-origin', 'X-Frame-Options': 'DENY', 'Content-Security-Policy': "default-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; script-src 'self'; connect-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'" });
   if (method === 'HEAD') return response.end();
   fs.createReadStream(filename).pipe(response);
 }
@@ -419,4 +427,6 @@ const server = http.createServer((request, response) => {
 server.listen(PORT, () => {
   console.log(`Brightloop is ready at http://localhost:${PORT}`);
   if (process.env.NODE_ENV !== 'production') console.log('Demo accounts: admin@brightloop.io, staff@brightloop.io, olivia@northstar.io · password: Brightloop!2026');
+  runBilling();
+  setInterval(() => { try { runBilling(); } catch (error) { console.error('Scheduled billing failed.', error); } }, 60 * 60 * 1000).unref();
 });

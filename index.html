@@ -11,58 +11,24 @@
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
-    <div class="app-shell">
+    <main id="auth-view" class="auth-layout" hidden></main>
+    <div id="application" class="application" hidden>
       <aside class="sidebar">
         <a class="brand" href="#overview"><span class="brand-mark">b</span><span>brightloop</span></a>
-        <div class="workspace"><span class="workspace-icon">B</span><span><strong>Brightloop Inc.</strong><small>Workspace</small></span><span class="chevron">⌄</span></div>
-        <div class="nav-label">WORKSPACE</div>
-        <nav class="main-nav" aria-label="Main navigation">
-          <button class="nav-item active" data-page="Overview"><span class="nav-icon">◫</span>Overview</button>
-          <button class="nav-item" data-page="Subscriptions"><span class="nav-icon">↻</span>Subscriptions<span class="nav-count">24</span></button>
-          <button class="nav-item" data-page="Customers"><span class="nav-icon">♙</span>Customers</button>
-          <button class="nav-item" data-page="Invoices"><span class="nav-icon">▤</span>Invoices<span class="nav-dot"></span></button>
-          <button class="nav-item" data-page="Payments"><span class="nav-icon">⇄</span>Payments</button>
-        </nav>
-        <div class="nav-label catalog-label">CATALOG</div>
-        <nav class="main-nav" aria-label="Catalog navigation">
-          <button class="nav-item" data-page="Plans"><span class="nav-icon">▦</span>Plans</button>
-          <button class="nav-item" data-page="Products"><span class="nav-icon">◇</span>Products</button>
-          <button class="nav-item" data-page="Discounts"><span class="nav-icon">％</span>Discounts</button>
-        </nav>
+        <div class="workspace"><span class="workspace-icon">B</span><span><strong>Brightloop Inc.</strong><small id="workspace-role">Workspace</small></span><span class="chevron">⌄</span></div>
+        <div id="sidebar-navigation"></div>
         <div class="sidebar-bottom">
-          <div class="help-card"><span class="help-spark">✦</span><strong>Need a hand?</strong><p>Visit our help center to learn more about Brightloop.</p><a href="#help">Visit help center <span>↗</span></a></div>
-          <button class="nav-item settings" data-page="Settings"><span class="nav-icon">⚙</span>Settings</button>
-          <div class="profile"><div class="avatar avatar-lavender">AM</div><span><strong>Alex Morgan</strong><small>Admin</small></span><span class="more">···</span></div>
+          <div class="help-card"><span class="help-spark">✦</span><strong>Subscription operations</strong><p>Plans, customers, billing and reporting in one place.</p><a href="https://github.com/Aashaan403/Odoo-Hackathon" target="_blank" rel="noreferrer">Project docs <span>↗</span></a></div>
+          <div class="profile"><div id="user-avatar" class="avatar avatar-lavender">AM</div><span><strong id="user-name">Alex Morgan</strong><small id="user-email">Admin</small></span><button class="text-button" id="logout-button">Sign out</button></div>
         </div>
       </aside>
-
       <main class="main-content">
-        <header class="topbar">
-          <div class="breadcrumbs"><span>Workspace</span><span class="crumb-slash">/</span><strong id="breadcrumb-page">Overview</strong></div>
-          <div class="top-actions"><button class="icon-button search-trigger" aria-label="Search">⌕</button><button class="icon-button bell" aria-label="Notifications">♧<i></i></button><div class="top-divider"></div><button class="avatar avatar-lavender top-avatar">AM</button></div>
-        </header>
-        <div class="page-wrap">
-          <section class="welcome-row"><div><div class="eyebrow"><span class="live-dot"></span>FRIDAY, OCTOBER 31, 2026</div><h1 id="page-title">Good morning, Alex <span class="wave">✳</span></h1><p class="welcome-subtitle">Here’s what’s happening with your subscriptions today.</p></div><div class="header-buttons"><button class="button button-secondary" id="range-button">▦ <span>Last 30 days</span><span class="button-chevron">⌄</span></button><button class="button button-primary" id="create-button"><span>＋</span> Create subscription</button></div></section>
-
-          <section class="metric-grid" aria-label="Key metrics">
-            <article class="metric-card"><div class="metric-top"><span>Monthly recurring revenue</span><span class="metric-icon icon-violet">↗</span></div><div class="metric-value">$48,294<span class="metric-cents">.00</span></div><div class="metric-foot"><span class="trend positive">↗ 12.8%</span><span>vs. last month</span><span class="sparkline spark-purple">▁▂▁▄▃▅▄▆▅█</span></div></article>
-            <article class="metric-card"><div class="metric-top"><span>Active subscriptions</span><span class="metric-icon icon-blue">↻</span></div><div class="metric-value">1,284</div><div class="metric-foot"><span class="trend positive">↗ 8.2%</span><span>vs. last month</span><span class="sparkline spark-blue">▁▂▃▂▄▃▅▄▆█</span></div></article>
-            <article class="metric-card"><div class="metric-top"><span>Payments collected</span><span class="metric-icon icon-green">↙</span></div><div class="metric-value">$42,810<span class="metric-cents">.50</span></div><div class="metric-foot"><span class="trend positive">↗ 10.4%</span><span>vs. last month</span><span class="sparkline spark-green">▁▁▃▂▃▄▅▄▇█</span></div></article>
-            <article class="metric-card"><div class="metric-top"><span>Overdue invoices</span><span class="metric-icon icon-orange">◷</span></div><div class="metric-value">$2,840<span class="metric-cents">.00</span></div><div class="metric-foot"><span class="trend negative">↘ 2.1%</span><span>vs. last month</span><span class="sparkline spark-orange">▇▆▅▆▄▅▃▄▂▁</span></div></article>
-          </section>
-
-          <section class="analytics-grid">
-            <article class="panel revenue-panel"><div class="panel-heading"><div><h2>Revenue overview</h2><p>Track your revenue performance over time</p></div><button class="select-button" id="revenue-period">Monthly <span>⌄</span></button></div><div class="chart-summary"><strong>$48,294.00</strong><span class="trend positive">↗ 12.8%</span><span class="chart-compare">vs. previous period</span></div><div class="chart-legend"><span><i class="legend-dot purple-dot"></i>Recurring revenue</span><span><i class="legend-dot gray-dot"></i>One-time revenue</span></div><div class="chart" role="img" aria-label="Revenue chart rising through October"><div class="y-labels"><span>$50k</span><span>$40k</span><span>$30k</span><span>$20k</span><span>$10k</span><span>$0</span></div><div class="chart-area"><div class="grid-lines"><i></i><i></i><i></i><i></i><i></i><i></i></div><svg viewBox="0 0 760 190" preserveAspectRatio="none" aria-hidden="true"><defs><linearGradient id="fillPurple" x1="0" x2="0" y1="0" y2="1"><stop offset="0%" stop-color="#8b72ed" stop-opacity=".22"/><stop offset="100%" stop-color="#8b72ed" stop-opacity="0"/></linearGradient></defs><path class="area-path" d="M0 151 C32 145 42 119 75 127 S123 142 152 116 S202 132 228 103 S280 121 304 94 S350 112 380 78 S427 100 456 70 S501 83 532 60 S580 81 608 42 S650 62 684 32 S730 44 760 15 V190 H0Z"/><path class="line-path" d="M0 151 C32 145 42 119 75 127 S123 142 152 116 S202 132 228 103 S280 121 304 94 S350 112 380 78 S427 100 456 70 S501 83 532 60 S580 81 608 42 S650 62 684 32 S730 44 760 15"/></svg><div class="x-labels"><span>Oct 1</span><span>Oct 5</span><span>Oct 10</span><span>Oct 15</span><span>Oct 20</span><span>Oct 25</span><span>Oct 31</span></div></div></div></article>
-            <article class="panel breakdown-panel"><div class="panel-heading"><div><h2>Subscription breakdown</h2><p>By plan type</p></div><button class="dots-button" aria-label="More options">···</button></div><div class="donut-wrap"><div class="donut"><div class="donut-center"><strong>1,284</strong><span>Total</span></div></div></div><div class="breakdown-legend"><div><span class="plan-name"><i class="legend-dot purple-dot"></i>Business</span><strong>642 <small>50%</small></strong></div><div><span class="plan-name"><i class="legend-dot blue-dot"></i>Starter</span><strong>385 <small>30%</small></strong></div><div><span class="plan-name"><i class="legend-dot green-dot"></i>Enterprise</span><strong>257 <small>20%</small></strong></div></div><button class="text-link view-plans" data-goto="Plans">View all plans <span>→</span></button></article>
-          </section>
-
-          <section class="panel activity-panel"><div class="panel-heading activity-heading"><div><h2>Recent subscriptions</h2><p>Keep track of your latest customer activity</p></div><div class="activity-actions"><div class="table-search"><span>⌕</span><input id="table-search" type="search" placeholder="Search subscriptions..." aria-label="Search subscriptions" /></div><button class="filter-button" id="filter-button">☷ <span>Filter</span></button><button class="button button-secondary export-button" id="export-button">⇩ <span>Export</span></button></div></div><div class="table-scroll"><table><thead><tr><th><input type="checkbox" aria-label="Select all subscriptions" /></th><th>SUBSCRIPTION</th><th>CUSTOMER</th><th>PLAN</th><th>STATUS</th><th>NEXT BILLING</th><th>AMOUNT</th><th></th></tr></thead><tbody id="subscriptions-body"></tbody></table></div><div class="table-footer"><span id="table-count">Showing 5 of 1,284 subscriptions</span><div class="pagination"><button disabled aria-label="Previous page">←</button><button class="page-current">1</button><button>2</button><button>3</button><span>…</span><button>12</button><button aria-label="Next page">→</button></div></div></section>
-          <footer class="page-footer"><span>© 2026 Brightloop, Inc.</span><span><a href="#privacy">Privacy</a><a href="#terms">Terms</a><a href="#support">Support</a></span></footer>
-        </div>
+        <header class="topbar"><div class="breadcrumbs"><span>Workspace</span><span class="crumb-slash">/</span><strong id="breadcrumb-page">Overview</strong></div><div class="top-actions"><span class="server-indicator"><i></i>Synced</span><button class="avatar avatar-lavender top-avatar" id="top-avatar">AM</button></div></header>
+        <div class="page-wrap"><section class="welcome-row"><div><div class="eyebrow"><span class="live-dot"></span><span id="today-label"></span></div><h1 id="page-title">Overview</h1><p class="welcome-subtitle" id="page-description"></p></div><div class="header-buttons" id="page-actions"></div></section><section id="app-content" aria-live="polite"></section><footer class="page-footer"><span>© 2026 Brightloop, Inc.</span><span><a href="#privacy">Privacy</a><a href="#terms">Terms</a><a href="mailto:support@brightloop.io">Support</a></span></footer></div>
       </main>
     </div>
-    <div class="toast" id="toast" role="status"></div>
-    <dialog id="create-dialog"><form method="dialog" id="subscription-form"><div class="modal-head"><div><span class="modal-eyebrow">NEW RECORD</span><h2>Create subscription</h2><p>Set up a new customer subscription.</p></div><button class="close-modal" value="cancel" aria-label="Close">×</button></div><label>Customer<input name="customer" required placeholder="e.g. Northstar Studio" /></label><div class="form-row"><label>Plan<select name="plan"><option>Business</option><option>Starter</option><option>Enterprise</option></select></label><label>Billing cycle<select name="cycle"><option>Monthly</option><option>Yearly</option></select></label></div><div class="form-row"><label>Amount<input name="amount" type="number" min="1" value="149" required /></label><label>Start date<input name="date" type="date" required /></label></div><div class="modal-actions"><button class="button button-secondary" value="cancel">Cancel</button><button class="button button-primary" id="save-subscription" value="default">Create subscription</button></div></form></dialog>
-    <script src="app.js"></script>
+    <dialog id="entity-dialog"><div id="dialog-content"></div></dialog>
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+    <script src="app.js" defer></script>
   </body>
 </html>
