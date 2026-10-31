@@ -146,13 +146,14 @@ function buildInvoice(subscription, period) {
 }
 function runBilling() {
   const created = [];
+  let modified = false;
   const currentDay = today();
   for (const subscription of db.subscriptions) {
     if (subscription.status !== 'Active' || !subscription.nextBillingDate) continue;
     let iterations = 0;
     while (subscription.nextBillingDate <= currentDay && iterations < 500) {
       if (subscription.expiryDate && subscription.nextBillingDate > subscription.expiryDate) {
-        if (byId(db.plans, subscription.planId, 'Plan').autoClose) subscription.status = 'Closed';
+        if (byId(db.plans, subscription.planId, 'Plan').autoClose) { subscription.status = 'Closed'; modified = true; }
         break;
       }
       const period = subscription.nextBillingDate;
@@ -160,11 +161,12 @@ function runBilling() {
       if (invoice) created.push(invoice);
       const plan = byId(db.plans, subscription.planId, 'Plan');
       subscription.nextBillingDate = addCycle(subscription.nextBillingDate, plan.interval);
+      modified = true;
       iterations += 1;
     }
-    if (subscription.expiryDate && subscription.expiryDate < currentDay && subscription.status === 'Active' && byId(db.plans, subscription.planId, 'Plan').autoClose) subscription.status = 'Closed';
+    if (subscription.expiryDate && subscription.expiryDate < currentDay && subscription.status === 'Active' && byId(db.plans, subscription.planId, 'Plan').autoClose) { subscription.status = 'Closed'; modified = true; }
   }
-  if (created.length) save();
+  if (modified || created.length) save();
   return created;
 }
 function summary(source = db, customerId = null, from = '', to = '') {
@@ -179,7 +181,7 @@ function summary(source = db, customerId = null, from = '', to = '') {
   }, 0);
   const paid = payments.reduce((sum, item) => sum + Number(item.amount), 0);
   const owed = invoices.reduce((sum, item) => sum + outstanding(item), 0);
-  const overdue = invoices.filter((item) => item.dueDate < today() && outstanding(item) > 0).reduce((sum, item) => sum + outstanding(item), 0);
+  const overdue = invoices.filter((item) => item.status !== 'Draft' && item.dueDate < today() && outstanding(item) > 0).reduce((sum, item) => sum + outstanding(item), 0);
   return { activeSubscriptions: subscriptions.filter((item) => item.status === 'Active').length, mrr: Number(mrr.toFixed(2)), revenue: Number(paid.toFixed(2)), outstanding: Number(owed.toFixed(2)), overdue: Number(overdue.toFixed(2)), invoiceCount: invoices.length };
 }
 function collectionName(pathName) {
@@ -394,7 +396,7 @@ async function route(request, response) {
         let deliveryStatus = '';
         if (body.action === 'confirm' && invoice.status === 'Draft') invoice.status = 'Confirmed';
         else if (body.action === 'cancel' && ['Draft', 'Confirmed'].includes(invoice.status)) invoice.cancelled = true;
-        else if (body.action === 'send' && !invoice.cancelled) {
+        else if (body.action === 'send' && !invoice.cancelled && !invoice.sentAt) {
           const customer = byId(db.customers, invoice.customerId, 'Customer');
           const lines = invoice.lines.map((line) => `${line.description} x ${line.quantity}: $${line.amount.toFixed(2)}`).join('\n');
           deliveryStatus = await deliverEmail({ to: customer.email, subject: `Brightloop invoice ${invoice.number}`, text: `Hello ${customer.name},\n\nInvoice ${invoice.number} is due ${invoice.dueDate}.\n${lines}\nTotal: $${invoice.total.toFixed(2)}\n\nThank you, Brightloop`, html: `<p>Hello ${escapeHtml(customer.name)},</p><p>Invoice <strong>${escapeHtml(invoice.number)}</strong> is due ${escapeHtml(invoice.dueDate)}.</p><pre>${escapeHtml(lines)}</pre><p>Total: <strong>$${invoice.total.toFixed(2)}</strong></p><p>Thank you, Brightloop</p>` }) ? 'delivered' : 'queued';
