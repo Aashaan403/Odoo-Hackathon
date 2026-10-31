@@ -89,10 +89,14 @@ function normalizeLines(lines, fallbackPlan) {
     return { productId: product.id, description: String(line.description || product.name).slice(0, 160), quantity, unitPrice, variant: String(line.variant || '').slice(0, 80), taxIds, planId: line.planId || fallbackPlan || null };
   });
 }
-function outstanding(invoice) {
-  const paid = db.payments.filter((payment) => payment.invoiceId === invoice.id).reduce((sum, payment) => sum + Number(payment.amount), 0);
-  return Math.max(0, Number((invoice.total - paid).toFixed(2)));
+// One pass over payments per request; callers reuse the map instead of rescanning payments per invoice.
+function paidTotals() {
+  const totals = new Map();
+  for (const payment of db.payments) totals.set(payment.invoiceId, (totals.get(payment.invoiceId) || 0) + Number(payment.amount));
+  return totals;
 }
+function outstanding(invoice, paid = paidTotals()) { return Math.max(0, billing.round(invoice.total - (paid.get(invoice.id) || 0))); }
+function indexById(collection) { return new Map(collection.map((item) => [item.id, item])); }
 function subscriptionAccess(user, subscription) { ownedOrStaff(user, 'Subscription', subscription.customerId); }
 function invoiceAccess(user, invoice) { ownedOrStaff(user, 'Invoice', invoice.customerId); }
 function priceSubscription(subscription, onDate = today()) {
@@ -148,8 +152,9 @@ function summary(source = db, customerId = null, from = '', to = '') {
   const payments = source.payments.filter((item) => invoiceIds.has(item.invoiceId) && (!from || item.date >= from) && (!to || item.date <= to));
   const mrr = subscriptions.filter((item) => item.status === 'Active').reduce((sum, item) => sum + billing.monthlyValue(item, byId(source.plans, item.planId, 'Plan').interval), 0);
   const paid = payments.reduce((sum, item) => sum + Number(item.amount), 0);
-  const owed = invoices.reduce((sum, item) => sum + outstanding(item), 0);
-  const overdue = invoices.filter((item) => item.status !== 'Draft' && item.dueDate < today() && outstanding(item) > 0).reduce((sum, item) => sum + outstanding(item), 0);
+  const paidMap = paidTotals();
+  const owed = invoices.reduce((sum, item) => sum + outstanding(item, paidMap), 0);
+  const overdue = invoices.filter((item) => item.status !== 'Draft' && item.dueDate < today()).reduce((sum, item) => sum + outstanding(item, paidMap), 0);
   return { activeSubscriptions: subscriptions.filter((item) => item.status === 'Active').length, mrr: Number(mrr.toFixed(2)), revenue: Number(paid.toFixed(2)), outstanding: Number(owed.toFixed(2)), overdue: Number(overdue.toFixed(2)), invoiceCount: invoices.length };
 }
 function collectionName(pathName) {
@@ -205,8 +210,13 @@ function publicData(user, searchParams) {
   result.taxes = db.taxes;
   result.discounts = user.role === 'customer' ? [] : db.discounts;
   result.quoteTemplates = user.role === 'customer' ? [] : db.quoteTemplates;
-  result.subscriptions = db.subscriptions.filter((item) => !customerId || item.customerId === customerId).map((item) => ({ ...item, customer: db.customers.find((customer) => customer.id === item.customerId), plan: db.plans.find((plan) => plan.id === item.planId) }));
-  result.invoices = db.invoices.filter((item) => (!customerId || item.customerId === customerId) && !item.cancelled).map((item) => ({ ...item, customer: db.customers.find((customer) => customer.id === item.customerId), subscription: db.subscriptions.find((subscription) => subscription.id === item.subscriptionId), paid: Number((item.total - outstanding(item)).toFixed(2)), outstanding: outstanding(item), status: outstanding(item) <= 0 ? 'Paid' : (item.status === 'Confirmed' && item.dueDate < today() ? 'Overdue' : item.status) }));
+  const customers = indexById(db.customers); const plans = indexById(db.plans); const subscriptions = indexById(db.subscriptions); const paid = paidTotals(); const currentDay = today();
+  result.subscriptions = db.subscriptions.filter((item) => !customerId || item.customerId === customerId).map((item) => ({ ...item, customer: customers.get(item.customerId), plan: plans.get(item.planId) }));
+  result.invoices = db.invoices.filter((item) => (!customerId || item.customerId === customerId) && !item.cancelled).map((item) => {
+    const balance = outstanding(item, paid);
+    const subscription = subscriptions.get(item.subscriptionId);
+    return { ...item, customer: customers.get(item.customerId), subscription: subscription && { id: subscription.id, number: subscription.number }, paid: billing.round(item.total - balance), outstanding: balance, status: balance <= 0 ? 'Paid' : (item.status === 'Confirmed' && item.dueDate < currentDay ? 'Overdue' : item.status) };
+  });
   result.payments = db.payments.filter((item) => !customerId || db.invoices.find((invoice) => invoice.id === item.invoiceId)?.customerId === customerId);
   if (user.role === 'admin') result.users = db.users.map(publicUser);
   return result;
@@ -405,8 +415,8 @@ async function route(request, response) {
     }
     if (pathname === '/api/reports' && method === 'GET') {
       requireUser(user); const customerId = user.role === 'customer' ? user.customerId : null; const report = summary(db, customerId, url.searchParams.get('from') || '', url.searchParams.get('to') || '');
-      const from = url.searchParams.get('from') || ''; const to = url.searchParams.get('to') || '';
-      const invoices = db.invoices.filter((invoice) => (!customerId || invoice.customerId === customerId) && (!from || invoice.issueDate >= from) && (!to || invoice.issueDate <= to) && !invoice.cancelled).map((invoice) => ({ id: invoice.id, number: invoice.number, issueDate: invoice.issueDate, dueDate: invoice.dueDate, total: invoice.total, outstanding: outstanding(invoice), status: outstanding(invoice) <= 0 ? 'Paid' : invoice.dueDate < today() ? 'Overdue' : invoice.status }));
+      const paid = paidTotals(); const currentDay = today(); const from = url.searchParams.get('from') || ''; const to = url.searchParams.get('to') || '';
+      const invoices = db.invoices.filter((invoice) => (!customerId || invoice.customerId === customerId) && !invoice.cancelled && (!from || invoice.issueDate >= from) && (!to || invoice.issueDate <= to)).map((invoice) => { const balance = outstanding(invoice, paid); return { id: invoice.id, number: invoice.number, customerId: invoice.customerId, subscriptionId: invoice.subscriptionId, issueDate: invoice.issueDate, dueDate: invoice.dueDate, total: invoice.total, outstanding: balance, status: balance <= 0 ? 'Paid' : invoice.status !== 'Draft' && invoice.dueDate < currentDay ? 'Overdue' : invoice.status }; });
       return respond(response, 200, { ...report, invoices });
     }
     fail(404, 'API route not found.');
