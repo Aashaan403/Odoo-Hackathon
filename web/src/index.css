@@ -13,14 +13,30 @@
   --color-faint: #a7a1a5;
   --color-alarm: #c4302b;
   --color-settled: #2e7a52;
-  --animate-draw: draw 1.4s cubic-bezier(0.65, 0, 0.35, 1) both;
+
+  /* One type scale (major third on a 16px root). Every text element in the app uses one of these. */
+  --text-caption: 0.8125rem;
+  --text-caption--line-height: 1.35;
+  --text-body: 0.9375rem;
+  --text-body--line-height: 1.5;
+  --text-lead: 1.0625rem;
+  --text-lead--line-height: 1.55;
+  --text-title: 1.25rem;
+  --text-title--line-height: 1.3;
+  --text-figure: 2rem;
+  --text-figure--line-height: 1.1;
+  --text-page: clamp(2.5rem, 1.9rem + 1.6vw, 3.25rem);
+  --text-page--line-height: 1;
+  --text-hero: clamp(3.5rem, 1.6rem + 5vw, 6rem);
+  --text-hero--line-height: 0.9;
+  --animate-reveal: reveal 1.4s cubic-bezier(0.65, 0, 0.35, 1) both;
   --animate-drawer: drawer 0.28s cubic-bezier(0.2, 0.8, 0.2, 1) both;
   --animate-veil: veil 0.2s ease-out both;
   --animate-toast: toast 0.24s ease-out both;
 
-  @keyframes draw {
-    from { stroke-dashoffset: 1; }
-    to { stroke-dashoffset: 0; }
+  @keyframes reveal {
+    from { clip-path: inset(-10px 100% -10px 0); }
+    to { clip-path: inset(-10px 0 -10px 0); }
   }
   @keyframes drawer {
     from { transform: translateX(48px); opacity: 0; }
@@ -44,7 +60,7 @@
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
   }
-  body { min-width: 320px; }
+  body { min-width: 320px; font-size: var(--text-body); line-height: var(--text-body--line-height); }
   ::selection { background: var(--color-plum); color: white; }
   :focus-visible { outline: 2px solid var(--color-plum); outline-offset: 2px; }
   input, select, textarea, button { font: inherit; color: inherit; }

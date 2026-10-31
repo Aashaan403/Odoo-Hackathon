@@ -15,7 +15,7 @@ const marks = {
 
 export function StatusTag({ status }) {
   return (
-    <span className={`inline-flex items-center gap-2 text-[13px] font-medium whitespace-nowrap ${status === 'Overdue' ? 'text-alarm' : ''}`}>
+    <span className={`inline-flex items-center gap-2 text-caption font-medium whitespace-nowrap ${status === 'Overdue' ? 'text-alarm' : ''}`}>
       <span aria-hidden className={`size-2 shrink-0 ${marks[status] || 'bg-faint'}`} />
       {status}
     </span>

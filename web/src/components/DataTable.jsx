@@ -13,10 +13,10 @@ export function DataTable({ columns, rows, onRowClick, activeId, empty = 'Nothin
   return (
     <div>
       <div className="overflow-x-auto">
-        <table className="w-full border-collapse text-sm" style={{ minWidth }}>
+        <table className="w-full border-collapse text-body" style={{ minWidth }}>
           <thead>
             <tr className="border-b border-ink">
-              {columns.map((column) => <th key={column.key} scope="col" className={`py-3 pr-5 text-[13px] font-medium text-mute last:pr-0 ${align(column)}`}>{column.header}</th>)}
+              {columns.map((column) => <th key={column.key} scope="col" className={`py-3 pr-5 text-caption font-medium text-mute last:pr-0 ${align(column)}`}>{column.header}</th>)}
             </tr>
           </thead>
           <tbody>
@@ -35,7 +35,7 @@ export function DataTable({ columns, rows, onRowClick, activeId, empty = 'Nothin
         </table>
       </div>
       {pages > 1 && (
-        <div className="flex items-center justify-between gap-4 pt-4 text-sm text-mute">
+        <div className="flex items-center justify-between gap-4 pt-4 text-body text-mute">
           <span className="tabular-nums">{page * pageSize + 1}–{Math.min(rows.length, (page + 1) * pageSize)} of {rows.length}</span>
           <div className="flex gap-4">
             <button className="font-medium hover:text-ink disabled:text-line" disabled={page === 0} onClick={() => setPage(page - 1)}>Previous</button>
@@ -50,7 +50,7 @@ export function DataTable({ columns, rows, onRowClick, activeId, empty = 'Nothin
 export function Empty({ children, action }) {
   return (
     <div className="flex flex-col items-start gap-3 border-y border-line py-10">
-      <p className="max-w-md text-sm text-mute">{children}</p>
+      <p className="max-w-md text-body text-mute">{children}</p>
       {action}
     </div>
   );

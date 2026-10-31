@@ -1,11 +1,11 @@
-const control = 'h-10 w-full border border-line bg-white px-3 text-sm transition-colors placeholder:text-faint hover:border-faint focus:border-ink focus:outline-none disabled:bg-mist disabled:text-mute';
+const control = 'h-10 w-full border border-line bg-white px-3 text-body transition-colors placeholder:text-faint hover:border-faint focus:border-ink focus:outline-none disabled:bg-mist disabled:text-mute';
 
 export function Field({ label, hint, children, className = '' }) {
   return (
     <label className={`flex min-w-0 flex-col gap-1.5 ${className}`}>
-      <span className="text-[13px] font-medium">{label}</span>
+      <span className="text-caption font-medium">{label}</span>
       {children}
-      {hint && <span className="text-xs text-mute">{hint}</span>}
+      {hint && <span className="text-caption text-mute">{hint}</span>}
     </label>
   );
 }
@@ -32,8 +32,8 @@ export function Toggle({ label, description, className = '', ...props }) {
         <span className="size-3 bg-ink transition-transform duration-150 group-has-checked:translate-x-4 group-has-checked:bg-white" />
       </span>
       <span className="flex flex-col">
-        <span className="text-sm font-medium">{label}</span>
-        {description && <span className="text-xs text-mute">{description}</span>}
+        <span className="text-body font-medium">{label}</span>
+        {description && <span className="text-caption text-mute">{description}</span>}
       </span>
     </label>
   );
@@ -45,5 +45,5 @@ export function FormGrid({ children, columns = 2 }) {
 
 export function FormError({ error }) {
   if (!error) return null;
-  return <p role="alert" className="border-l-2 border-alarm bg-alarm/5 px-3 py-2 text-sm text-alarm">{error}</p>;
+  return <p role="alert" className="border-l-2 border-alarm bg-alarm/5 px-3 py-2 text-body text-alarm">{error}</p>;
 }

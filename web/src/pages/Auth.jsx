@@ -32,7 +32,7 @@ function PasswordRules({ value }) {
       {PASSWORD_RULES.map(([label, test]) => {
         const met = test(value);
         return (
-          <li key={label} className={`flex items-center gap-2 text-xs ${met ? 'text-ink' : 'text-mute'}`}>
+          <li key={label} className={`flex items-center gap-2 text-caption ${met ? 'text-ink' : 'text-mute'}`}>
             <span aria-hidden className={`size-2 ${met ? 'bg-plum' : 'border border-faint'}`} />
             {label}
             <span className="sr-only">{met ? 'met' : 'not met'}</span>
@@ -88,19 +88,19 @@ export default function AuthPage({ mode }) {
       <aside className="flex flex-col justify-between gap-12 border-b-2 border-ink px-6 py-8 sm:px-10 lg:border-r lg:border-b-0 lg:border-line lg:py-10">
         <Wordmark />
         <div>
-          <p className="figure max-w-[11ch] text-[clamp(3rem,7.5vw,6.75rem)] leading-[0.88] font-black">Recurring billing, run in one place.</p>
-          <p className="mt-6 max-w-md text-[15px] text-mute">Products, plans, quotations, subscriptions, invoices, payments and revenue, from the first signup to the month-end numbers.</p>
+          <p className="figure max-w-[11ch] text-hero font-black">Recurring billing, run in one place.</p>
+          <p className="mt-6 max-w-md text-body text-mute">Products, plans, quotations, subscriptions, invoices, payments and revenue, from the first signup to the month-end numbers.</p>
         </div>
         {mode === 'login' && (
           <div className="hidden lg:block">
-            <p className="text-[13px] text-mute">Demo accounts share the password <span className="font-semibold text-ink">{DEMO_PASSWORD}</span></p>
+            <p className="text-caption text-mute">Demo accounts share the password <span className="font-semibold text-ink">{DEMO_PASSWORD}</span></p>
             <ul className="mt-3 border-t border-line">
               {DEMO_ACCOUNTS.map(([role, email, summary]) => (
                 <li key={email} className="border-b border-line">
                   <button type="button" onClick={() => setForm({ ...form, email, password: DEMO_PASSWORD })} className="group flex w-full items-baseline gap-4 py-3 text-left">
-                    <span className="w-20 shrink-0 text-sm font-semibold group-hover:text-plum">{role}</span>
-                    <span className="min-w-0 flex-1 truncate text-sm">{email}</span>
-                    <span className="hidden text-xs text-mute xl:inline">{summary}</span>
+                    <span className="w-20 shrink-0 text-body font-semibold group-hover:text-plum">{role}</span>
+                    <span className="min-w-0 flex-1 truncate text-body">{email}</span>
+                    <span className="hidden text-caption text-mute xl:inline">{summary}</span>
                   </button>
                 </li>
               ))}
@@ -112,10 +112,10 @@ export default function AuthPage({ mode }) {
       <main className="flex items-center px-6 py-12 sm:px-10">
         <form onSubmit={submit} className="mx-auto flex w-full max-w-sm flex-col gap-5" noValidate={false}>
           <div>
-            <h1 className="figure text-[2.5rem] leading-none font-extrabold">{copy.title}</h1>
-            <p className="mt-3 text-sm text-mute">{copy.lead}</p>
+            <h1 className="figure text-page font-extrabold">{copy.title}</h1>
+            <p className="mt-3 text-body text-mute">{copy.lead}</p>
           </div>
-          {notice && <p role="status" className="border-l-2 border-plum bg-plum-wash px-3 py-2 text-sm">{notice}{resetLink && <> <Link className="font-semibold text-plum underline underline-offset-2" to={resetLink}>Open the reset link</Link> (shown because email delivery is not configured)</>}</p>}
+          {notice && <p role="status" className="border-l-2 border-plum bg-plum-wash px-3 py-2 text-body">{notice}{resetLink && <> <Link className="font-semibold text-plum underline underline-offset-2" to={resetLink}>Open the reset link</Link> (shown because email delivery is not configured)</>}</p>}
           <FormError error={error} />
 
           {mode === 'signup' && (
@@ -135,7 +135,7 @@ export default function AuthPage({ mode }) {
 
           <Button type="submit" busy={busy} disabled={(mode === 'signup' || mode === 'reset') && !passwordOk} className="mt-1 w-full">{copy.submit}</Button>
 
-          <div className="flex flex-wrap justify-between gap-3 border-t border-line pt-4 text-sm">
+          <div className="flex flex-wrap justify-between gap-3 border-t border-line pt-4 text-body">
             {mode === 'login' && <><Link to="/signup" className="font-medium hover:text-plum">Create an account</Link><Link to="/forgot-password" className="text-mute hover:text-ink">Forgot password?</Link></>}
             {mode !== 'login' && <Link to="/login" className="font-medium hover:text-plum">Back to sign in</Link>}
           </div>
@@ -148,7 +148,7 @@ export default function AuthPage({ mode }) {
 export function Wordmark({ className = '' }) {
   return (
     <Link to="/" className={`inline-flex items-center gap-2.5 text-xl font-black tracking-[-0.04em] ${className}`} style={{ fontStretch: '112%' }}>
-      <span aria-hidden className="grid size-6 place-items-center bg-plum text-sm text-white">b</span>
+      <span aria-hidden className="grid size-6 place-items-center bg-plum text-body text-white">b</span>
       brightloop
     </Link>
   );

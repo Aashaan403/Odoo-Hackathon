@@ -8,32 +8,35 @@ function niceCeiling(value) {
 }
 
 // Revenue as a step line: billing happens in periods, so each month holds flat until the next.
+// The plot stretches to any width at a fixed height; labels are HTML so they never scale.
 export function StepChart({ points, height = 240, formatValue = compactMoney, label }) {
-  const width = 960;
-  const top = 18;
-  const bottom = 30;
-  const right = 64;
   const ceiling = niceCeiling(Math.max(...points.map((point) => point.value), 0));
-  const x = (index) => (index / points.length) * (width - right);
-  const y = (value) => top + (1 - value / ceiling) * (height - top - bottom);
+  const y = (value) => 100 - (value / ceiling) * 100;
+  const x = (index) => (index / points.length) * 1000;
   const path = points.map((point, index) => `${index === 0 ? 'M' : 'L'}${x(index)},${y(point.value)} H${x(index + 1)}`).join(' ');
-  const area = `${path} V${y(0)} H${x(0)} Z`;
   const last = points.at(-1);
 
   return (
-    <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label={label} className="block h-auto w-full overflow-visible">
-      {[0, 0.5, 1].map((fraction) => (
-        <g key={fraction}>
-          <line x1="0" x2={width - right} y1={y(ceiling * fraction)} y2={y(ceiling * fraction)} stroke={fraction === 0 ? '#0e0e0e' : '#e5e2e4'} strokeWidth="1" />
-          <text x={width - right + 12} y={y(ceiling * fraction) + 4} fontSize="12" fill="#6e696d" className="tabular-nums">{formatValue(ceiling * fraction)}</text>
-        </g>
-      ))}
-      <path d={area} fill="#714b67" opacity="0.06" />
-      <path d={path} fill="none" stroke="#714b67" strokeWidth="2.5" strokeLinejoin="miter" pathLength="1" strokeDasharray="1" className="animate-draw" />
-      {last && <rect x={x(points.length) - 5} y={y(last.value) - 5} width="10" height="10" fill="#714b67" />}
-      {points.map((point, index) => (
-        <text key={point.key} x={x(index) + 2} y={height - 8} fontSize="12" fill={index === points.length - 1 ? '#0e0e0e' : '#a7a1a5'} fontWeight={index === points.length - 1 ? 600 : 400}>{point.label}</text>
-      ))}
-    </svg>
+    <figure role="img" aria-label={label} className="m-0">
+      <div className="relative pr-16" style={{ height }}>
+        <div className="relative h-full">
+          {[1, 0.5, 0].map((fraction) => (
+            <div key={fraction} className={`absolute inset-x-0 border-t ${fraction === 0 ? 'border-ink' : 'border-line'}`} style={{ top: `${y(ceiling * fraction)}%` }}>
+              <span className="absolute -top-2.5 -right-16 w-14 text-caption tabular-nums text-mute">{formatValue(ceiling * fraction)}</span>
+            </div>
+          ))}
+          <svg viewBox="0 0 1000 100" preserveAspectRatio="none" className="animate-reveal absolute inset-0 h-full w-full overflow-visible">
+            <path d={`${path} V100 H0 Z`} fill="#714b67" opacity="0.07" />
+            <path d={path} fill="none" stroke="#714b67" strokeWidth="2.5" vectorEffect="non-scaling-stroke" />
+          </svg>
+          {last && <span aria-hidden className="absolute -mt-[5px] -mr-[5px] size-2.5 bg-plum" style={{ right: 0, top: `${y(last.value)}%` }} />}
+        </div>
+      </div>
+      <div className="mt-2 grid pr-16" style={{ gridTemplateColumns: `repeat(${points.length}, minmax(0, 1fr))` }}>
+        {points.map((point, index) => (
+          <span key={point.key} className={`truncate text-caption ${index === points.length - 1 ? 'font-semibold text-ink' : 'text-faint'}`}>{point.label}</span>
+        ))}
+      </div>
+    </figure>
   );
 }

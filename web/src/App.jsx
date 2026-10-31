@@ -3,6 +3,7 @@ import { useSession } from './lib/api.js';
 import Shell from './components/Shell.jsx';
 import { Loading } from './components/Layout.jsx';
 import AuthPage from './pages/Auth.jsx';
+import Overview from './pages/Overview.jsx';
 
 export default function App() {
   const session = useSession();
@@ -21,7 +22,7 @@ export default function App() {
         </>
       ) : (
         <Route element={<Shell user={user} />}>
-          <Route index element={<p className="text-mute">Overview is on its way.</p>} />
+          <Route index element={<Overview />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
       )}

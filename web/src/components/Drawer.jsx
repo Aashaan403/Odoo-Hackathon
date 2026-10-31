@@ -26,8 +26,8 @@ export function Drawer({ open, onClose, title, kicker, children, footer, wide = 
       <section role="dialog" aria-modal="true" aria-label={typeof title === 'string' ? title : undefined} className={`animate-drawer relative flex h-full w-full flex-col border-l border-ink bg-white ${wide ? 'max-w-[780px]' : 'max-w-[620px]'}`}>
         <header className="flex items-start justify-between gap-6 border-b border-line px-6 pt-6 pb-5 sm:px-8">
           <div className="min-w-0">
-            {kicker && <div className="text-[13px] text-mute">{kicker}</div>}
-            <h2 className="figure mt-1 truncate text-[2rem] leading-none font-extrabold">{title}</h2>
+            {kicker && <div className="text-caption text-mute">{kicker}</div>}
+            <h2 className="figure mt-1 truncate text-figure font-extrabold">{title}</h2>
           </div>
           <button ref={closeButton} onClick={onClose} aria-label="Close panel" className="no-print -mt-1 -mr-2 grid size-10 shrink-0 place-items-center text-mute hover:text-ink">
             <svg viewBox="0 0 16 16" className="size-4" aria-hidden><path d="M3 3l10 10M13 3L3 13" stroke="currentColor" strokeWidth="1.6" /></svg>
