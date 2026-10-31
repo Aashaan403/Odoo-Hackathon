@@ -113,7 +113,7 @@ function applyDiscount(subscription, lines, subtotal) {
   return { amount: Number(Math.min(eligibleBase, discount).toFixed(2)), rule, eligibleLines, eligibleBase };
 }
 function buildInvoice(subscription, period) {
-  if (db.invoices.some((invoice) => invoice.subscriptionId === subscription.id && invoice.billingPeriod === period && !invoice.cancelled)) return null;
+  if (db.invoices.some((invoice) => invoice.subscriptionId === subscription.id && invoice.billingPeriod === period)) return null;
   const customer = byId(db.customers, subscription.customerId, 'Customer');
   const lines = subscription.lines.map((line) => {
     const product = byId(db.products, line.productId, 'Product');
@@ -214,7 +214,8 @@ function createRecord(kind, body, user) {
   }
   if (kind === 'taxes') {
     const rate = safeNumber(body.rate, 'Tax rate'); if (rate > 100) fail(400, 'Tax rate cannot exceed 100%.');
-    return { id, name: String(body.name || '').trim(), rate, active };
+    const name = String(body.name || '').trim(); if (!name) fail(400, 'Tax name is required.');
+    return { id, name, rate, active };
   }
   if (kind === 'discounts') {
     const type = String(body.type || 'percentage'); if (!['percentage', 'fixed'].includes(type)) fail(400, 'Discount type must be percentage or fixed.');
@@ -333,8 +334,8 @@ async function route(request, response) {
       if (method === 'PATCH' && recordId) {
         const body = await readBody(request); const record = byId(db[kind], recordId);
         if (kind === 'products') Object.assign(record, { name: body.name ?? record.name, type: body.type ?? record.type, salesPrice: body.salesPrice === undefined ? record.salesPrice : safeNumber(body.salesPrice, 'Sales price'), costPrice: body.costPrice === undefined ? record.costPrice : safeNumber(body.costPrice, 'Cost price'), notes: body.notes ?? record.notes, variants: body.variants ?? record.variants, active: body.active ?? record.active });
-        else if (kind === 'plans') { for (const key of ['name', 'price', 'interval', 'minQuantity', 'availableFrom', 'availableTo', 'autoClose', 'allowEarlyClose', 'allowPause', 'allowRenew', 'active']) if (body[key] !== undefined) record[key] = body[key]; if (body.productId !== undefined) { byId(db.products, body.productId, 'Product'); record.productId = body.productId; } }
-        else if (kind === 'taxes') { if (body.name !== undefined) record.name = String(body.name); if (body.rate !== undefined) record.rate = safeNumber(body.rate, 'Tax rate'); if (body.active !== undefined) record.active = Boolean(body.active); }
+        else if (kind === 'plans') { for (const key of ['name', 'price', 'interval', 'minQuantity', 'availableFrom', 'availableTo', 'autoClose', 'allowEarlyClose', 'allowPause', 'allowRenew', 'active']) if (body[key] !== undefined) record[key] = body[key]; if (body.productId !== undefined) { byId(db.products, body.productId, 'Product'); record.productId = body.productId; } if (!['daily', 'weekly', 'monthly', 'yearly'].includes(record.interval)) fail(400, 'Choose a supported billing interval.'); }
+        else if (kind === 'taxes') { if (body.name !== undefined) record.name = String(body.name).trim(); if (body.rate !== undefined) { record.rate = safeNumber(body.rate, 'Tax rate'); if (record.rate > 100) fail(400, 'Tax rate cannot exceed 100%.'); } if (body.active !== undefined) record.active = Boolean(body.active); if (!record.name) fail(400, 'Tax name is required.'); }
         else Object.assign(record, body, { id: record.id });
         save(); return respond(response, 200, record);
       }
@@ -349,7 +350,7 @@ async function route(request, response) {
       if (!plan.active || plan.availableFrom > today() || (plan.availableTo && plan.availableTo < today())) fail(400, 'This plan is not available for a new subscription.');
       const requestedLines = body.lines?.length ? body.lines : template?.lines || [{ productId: plan.productId, quantity: plan.minQuantity, unitPrice: plan.price, taxIds: [] }];
       const lines = normalizeLines(requestedLines, plan.id);
-      if (lines.reduce((sum, line) => sum + line.quantity, 0) < plan.minQuantity) fail(400, `This plan requires at least ${plan.minQuantity} seats.`);
+      if (lines.filter((line) => line.productId === plan.productId).reduce((sum, line) => sum + line.quantity, 0) < plan.minQuantity) fail(400, `This plan requires at least ${plan.minQuantity} seats of its primary product.`);
       const startDate = String(body.startDate || today()); const status = template ? 'Quotation' : (user.role === 'customer' ? 'Active' : 'Draft');
       db.counters.subscription += 1;
       const subscription = { id: uid('sub'), number: `SUB-${String(db.counters.subscription).padStart(4, '0')}`, customerId: customer.id, planId: plan.id, status, startDate, expiryDate: String(body.expiryDate || (template ? addDays(today(), template.validityDays) : '')), nextBillingDate: startDate, paymentTermsDays: safeNumber(body.paymentTermsDays || 15, 'Payment terms', { min: 0 }), discountId: String(body.discountId || ''), lines, quoteTemplateId: template?.id || '' };
@@ -370,9 +371,9 @@ async function route(request, response) {
       }
       if (method === 'POST' && subscriptionMatch[2] === 'action') {
         const body = await readBody(request); const action = body.action; const plan = byId(db.plans, subscription.planId, 'Plan');
-        const allowed = user.role !== 'customer' || (action === 'pause' && plan.allowPause) || (action === 'close' && plan.allowEarlyClose) || action === 'renew';
+        const allowed = (action !== 'pause' || plan.allowPause) && (action !== 'close' || plan.allowEarlyClose) && (action !== 'renew' || plan.allowRenew);
         if (!allowed) fail(403, 'Your plan does not allow this action.');
-        const transitions = { quotation: ['Quotation'], confirm: ['Draft', 'Quotation'], activate: ['Confirmed'], pause: ['Active'], resume: ['Paused'], close: ['Active', 'Paused', 'Draft', 'Quotation', 'Confirmed'], renew: ['Closed'] };
+        const transitions = { quotation: ['Draft'], confirm: ['Quotation'], activate: ['Confirmed'], pause: ['Active'], resume: ['Paused'], close: ['Active', 'Paused', 'Draft', 'Quotation', 'Confirmed'], renew: ['Closed'] };
         const target = { quotation: 'Quotation', confirm: 'Confirmed', activate: 'Active', pause: 'Paused', resume: 'Active', close: 'Closed', renew: 'Active' }[action];
         if (!target || !transitions[action].includes(subscription.status)) fail(409, `Cannot ${action} a ${subscription.status.toLowerCase()} subscription.`);
         if (action === 'renew' && !plan.allowRenew) fail(400, 'Renewal is disabled for this plan.');
@@ -395,12 +396,13 @@ async function route(request, response) {
         requireRole(user, 'admin', 'staff'); const body = await readBody(request);
         let deliveryStatus = '';
         if (body.action === 'confirm' && invoice.status === 'Draft') invoice.status = 'Confirmed';
-        else if (body.action === 'cancel' && ['Draft', 'Confirmed'].includes(invoice.status)) invoice.cancelled = true;
+        else if (body.action === 'cancel' && ['Draft', 'Confirmed'].includes(invoice.status) && !db.payments.some((payment) => payment.invoiceId === invoice.id)) { invoice.cancelled = true; const rule = db.discounts.find((item) => item.id === invoice.discountId); if (rule) rule.usedCount = Math.max(0, rule.usedCount - 1); }
         else if (body.action === 'send' && !invoice.cancelled && !invoice.sentAt) {
           const customer = byId(db.customers, invoice.customerId, 'Customer');
           const lines = invoice.lines.map((line) => `${line.description} x ${line.quantity}: $${line.amount.toFixed(2)}`).join('\n');
-          deliveryStatus = await deliverEmail({ to: customer.email, subject: `Brightloop invoice ${invoice.number}`, text: `Hello ${customer.name},\n\nInvoice ${invoice.number} is due ${invoice.dueDate}.\n${lines}\nTotal: $${invoice.total.toFixed(2)}\n\nThank you, Brightloop`, html: `<p>Hello ${escapeHtml(customer.name)},</p><p>Invoice <strong>${escapeHtml(invoice.number)}</strong> is due ${escapeHtml(invoice.dueDate)}.</p><pre>${escapeHtml(lines)}</pre><p>Total: <strong>$${invoice.total.toFixed(2)}</strong></p><p>Thank you, Brightloop</p>` }) ? 'delivered' : 'queued';
-          if (deliveryStatus === 'queued') { db.emailOutbox ||= []; db.emailOutbox.unshift({ id: uid('mail'), to: customer.email, subject: `Brightloop invoice ${invoice.number}`, invoiceId: invoice.id, createdAt: new Date().toISOString(), status: 'queued' }); }
+          const message = { to: customer.email, subject: `Brightloop invoice ${invoice.number}`, text: `Hello ${customer.name},\n\nInvoice ${invoice.number} is due ${invoice.dueDate}.\n${lines}\nTotal: $${invoice.total.toFixed(2)}\n\nThank you, Brightloop`, html: `<p>Hello ${escapeHtml(customer.name)},</p><p>Invoice <strong>${escapeHtml(invoice.number)}</strong> is due ${escapeHtml(invoice.dueDate)}.</p><pre>${escapeHtml(lines)}</pre><p>Total: <strong>$${invoice.total.toFixed(2)}</strong></p><p>Thank you, Brightloop</p>` };
+          deliveryStatus = await deliverEmail(message) ? 'delivered' : 'queued';
+          if (deliveryStatus === 'queued') { db.emailOutbox ||= []; db.emailOutbox.unshift({ ...message, id: uid('mail'), invoiceId: invoice.id, createdAt: new Date().toISOString(), status: 'queued' }); }
           invoice.status = invoice.status === 'Draft' ? 'Confirmed' : invoice.status; invoice.sentAt = new Date().toISOString(); invoice.deliveryStatus = deliveryStatus;
         }
         else fail(409, 'That invoice action is not available in its current state.');
@@ -418,13 +420,14 @@ async function route(request, response) {
     }
     if (pathname === '/api/reports' && method === 'GET') {
       requireUser(user); const customerId = user.role === 'customer' ? user.customerId : null; const report = summary(db, customerId, url.searchParams.get('from') || '', url.searchParams.get('to') || '');
-      const invoices = db.invoices.filter((invoice) => (!customerId || invoice.customerId === customerId) && !invoice.cancelled).map((invoice) => ({ id: invoice.id, number: invoice.number, issueDate: invoice.issueDate, dueDate: invoice.dueDate, total: invoice.total, outstanding: outstanding(invoice), status: outstanding(invoice) <= 0 ? 'Paid' : invoice.dueDate < today() ? 'Overdue' : invoice.status }));
+      const from = url.searchParams.get('from') || ''; const to = url.searchParams.get('to') || '';
+      const invoices = db.invoices.filter((invoice) => (!customerId || invoice.customerId === customerId) && (!from || invoice.issueDate >= from) && (!to || invoice.issueDate <= to) && !invoice.cancelled).map((invoice) => ({ id: invoice.id, number: invoice.number, issueDate: invoice.issueDate, dueDate: invoice.dueDate, total: invoice.total, outstanding: outstanding(invoice), status: outstanding(invoice) <= 0 ? 'Paid' : invoice.dueDate < today() ? 'Overdue' : invoice.status }));
       return respond(response, 200, { ...report, invoices });
     }
     fail(404, 'API route not found.');
   }
   if (method !== 'GET' && method !== 'HEAD') return respond(response, 405, { error: 'Method not allowed.' });
-  const relative = pathname === '/' ? 'index.html' : pathname.replace(/^\/+/, '');
+  const relative = pathname === '/' || pathname === '/reset-password' ? 'index.html' : pathname.replace(/^\/+/, '');
   if (!['index.html', 'styles.css', 'app.js'].includes(relative)) return respond(response, 404, { error: 'Not found.' });
   const filename = path.resolve(publicRoot, relative);
   if (!filename.startsWith(`${publicRoot}${path.sep}`) && filename !== path.join(publicRoot, 'index.html')) return respond(response, 403, { error: 'Forbidden.' });
